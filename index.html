@@ -1640,7 +1640,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   }
   renderChoices();
 
-  function renderAll(){ Object.keys(knobRenders).forEach(function(id){ knobRenders[id](); }); renderChoices(); renderToggles(); renderMatrix(); renderWheels(); }
+  function renderAll(){ Object.keys(knobRenders).forEach(function(id){ knobRenders[id](); }); renderChoices(); renderToggles(); renderMatrix(); renderWheels(); drawGraphs(); }
 
   // Every change: tell the engine, redraw the preview, mark the preset edited.
   function changed(){
