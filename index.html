@@ -132,8 +132,29 @@
         "env2   env2   env2   env3   env3   env3"
         "matrix matrix matrix matrix matrix matrix";
     }
+    .modules--fx{grid-template-areas:"fx fx fx fx fx fx";}
   }
   .modules[hidden]{display:none;}
+  /* Effect units, as on Loam Eight Sub: name, slide switch, knobs; off dims them. */
+  .fx-rack{display:flex; gap:10px; flex-wrap:wrap;}
+  .fx-unit{
+    flex:1 1 140px; display:flex; flex-direction:column; gap:10px; padding:10px 8px 12px;
+    background:var(--panel); border:1px solid var(--groove); border-radius:10px; box-shadow:inset 0 1px 2px rgba(0,0,0,.06);
+  }
+  .fx-head{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .fx-sub{font-size:10px; font-weight:600; letter-spacing:.08em; color:var(--ink-soft); text-transform:uppercase;}
+  .fx-unit .knob-row{justify-content:center; transition:opacity .15s, filter .15s;}
+  .fx-unit.is-off .knob-row{opacity:.42; filter:grayscale(.7);}
+  .fx-switch{position:relative; display:inline-flex; cursor:pointer;}
+  .fx-switch input{position:absolute; inset:0; opacity:0; margin:0; cursor:pointer;}
+  .fx-track{width:32px; height:18px; border-radius:999px; background:var(--groove-dark); box-shadow:inset 0 1px 2px var(--shadow); position:relative; transition:background .15s;}
+  .fx-track::after{
+    content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:var(--panel-raised); box-shadow:0 1px 2px var(--shadow); transition:transform .15s;
+  }
+  .fx-switch input:checked + .fx-track{background:var(--accent);}
+  .fx-switch input:checked + .fx-track::after{transform:translateX(14px);}
+  .fx-switch input:focus-visible + .fx-track{outline:2px solid var(--focus); outline-offset:2px;}
   .presets-row{display:flex;}
   .page-tabs{display:flex; gap:6px; --accent:var(--coral);}
   .page-tab{min-width:70px; letter-spacing:.12em;}
@@ -309,6 +330,7 @@
   <div class="page-tabs" role="tablist" aria-label="Panel pages">
     <button class="chip-btn page-tab is-active" type="button" role="tab" data-page="sound" aria-selected="true">SOUND</button>
     <button class="chip-btn page-tab" type="button" role="tab" data-page="mod" aria-selected="false">MOD</button>
+    <button class="chip-btn page-tab" type="button" role="tab" data-page="fx" aria-selected="false">FX</button>
   </div>
 
   <div class="modules" data-page="sound">
@@ -391,6 +413,39 @@
     <section class="module" style="--accent:var(--sage); --area:matrix">
       <h2 class="module-title">Mod Matrix</h2>
       <div class="matrix" id="matrix"></div>
+    </section>
+  </div>
+
+  <div class="modules modules--fx" data-page="fx" hidden>
+    <section class="module" style="--accent:var(--lavender); --area:fx">
+      <h2 class="module-title">Effects</h2>
+      <div class="fx-rack">
+        <div class="fx-unit is-off" data-param="fxDist">
+          <div class="fx-head"><span class="fx-sub" id="fx-dist-label">Dist</span>
+            <label class="fx-switch"><input type="checkbox" role="switch" aria-labelledby="fx-dist-label"><span class="fx-track" aria-hidden="true"></span></label></div>
+          <div class="knob-row" id="dist-knobs"></div>
+        </div>
+        <div class="fx-unit is-off" data-param="fxCho">
+          <div class="fx-head"><span class="fx-sub" id="fx-cho-label">Chorus</span>
+            <label class="fx-switch"><input type="checkbox" role="switch" aria-labelledby="fx-cho-label"><span class="fx-track" aria-hidden="true"></span></label></div>
+          <div class="knob-row" id="cho-knobs"></div>
+        </div>
+        <div class="fx-unit is-off" data-param="fxDly">
+          <div class="fx-head"><span class="fx-sub" id="fx-dly-label">Delay</span>
+            <label class="fx-switch"><input type="checkbox" role="switch" aria-labelledby="fx-dly-label"><span class="fx-track" aria-hidden="true"></span></label></div>
+          <div class="knob-row" id="dly-knobs"></div>
+        </div>
+        <div class="fx-unit is-off" data-param="fxRev">
+          <div class="fx-head"><span class="fx-sub" id="fx-rev-label">Reverb</span>
+            <label class="fx-switch"><input type="checkbox" role="switch" aria-labelledby="fx-rev-label"><span class="fx-track" aria-hidden="true"></span></label></div>
+          <div class="knob-row" id="rev-knobs"></div>
+        </div>
+        <div class="fx-unit is-off" data-param="fxComp">
+          <div class="fx-head"><span class="fx-sub" id="fx-comp-label">Comp</span>
+            <label class="fx-switch"><input type="checkbox" role="switch" aria-labelledby="fx-comp-label"><span class="fx-track" aria-hidden="true"></span></label></div>
+          <div class="knob-row" id="comp-knobs"></div>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -915,7 +970,12 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     l2Shape:'tri', l2Rate:0.5, l2Delay:0, l2Retrig:false,
     e2A:5, e2D:500, e2S:0, e2R:300,
     e3A:300, e3D:1000, e3S:50, e3R:800,
-    volume:70, reverb:20,
+    fxDist:false, distDrive:40, distTone:6000, distMix:50,
+    fxCho:false, choRate:0.6, choDepth:40, choMix:50,
+    fxDly:false, dlyTime:350, dlyFb:35, dlyMix:25,
+    fxRev:true, revSize:2.4, reverb:20,
+    fxComp:false, compThresh:-18, compRatio:4, compGain:0,
+    volume:70,
     // Wheels: what the mod wheel does, and how far the pitch wheel bends (semitones).
     modMode:'vib', bendRange:2
   };
@@ -966,13 +1026,31 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     e3S:      { label:'Sustain',  min:0,    max:100,   unit:'%' },
     e3R:      { label:'Release',  min:10,   max:6000,  unit:'ms', log:true },
     volume:   { label:'Volume',   min:0,    max:100,   unit:'%' },
-    reverb:   { label:'Reverb',   min:0,    max:100,   unit:'%' }
+    reverb:   { label:'Mix',      min:0,    max:100,   unit:'%' },
+    distDrive:{ label:'Drive',    min:0,    max:100,   unit:'%' },
+    distTone: { label:'Tone',     min:500,  max:16000, unit:'Hz', log:true },
+    distMix:  { label:'Mix',      min:0,    max:100,   unit:'%' },
+    choRate:  { label:'Rate',     min:0.05, max:5,     unit:'hz', log:true },
+    choDepth: { label:'Depth',    min:0,    max:100,   unit:'%' },
+    choMix:   { label:'Mix',      min:0,    max:100,   unit:'%' },
+    dlyTime:  { label:'Time',     min:20,   max:1500,  unit:'ms', log:true },
+    dlyFb:    { label:'Feedbk',   min:0,    max:95,    unit:'%' },
+    dlyMix:   { label:'Mix',      min:0,    max:100,   unit:'%' },
+    revSize:  { label:'Size',     min:0.3,  max:8,     unit:'s', log:true },
+    compThresh:{ label:'Thresh',  min:-60,  max:0,     unit:'dB' },
+    compRatio:{ label:'Ratio',    min:1,    max:20,    unit:':1', log:true },
+    compGain: { label:'Gain',     min:0,    max:24,    unit:'dB' }
   };
   for (var mi = 0; mi < MOD_SLOTS; mi++) KNOBS['modAmt' + mi] = { label:'Amount', min:-100, max:100, unit:'±' };
   var LAYOUT = {
     'timbre-knobs': ['morph', 'oddEven', 'pluck'],
     'filter-knobs': ['cutoff', 'res', 'envAmt', 'keytrack'],
-    'out-knobs':    ['volume', 'reverb'],
+    'out-knobs':    ['volume'],
+    'dist-knobs':   ['distDrive', 'distTone', 'distMix'],
+    'cho-knobs':    ['choRate', 'choDepth', 'choMix'],
+    'dly-knobs':    ['dlyTime', 'dlyFb', 'dlyMix'],
+    'rev-knobs':    ['revSize', 'reverb'],
+    'comp-knobs':   ['compThresh', 'compRatio', 'compGain'],
     'fenv-knobs':   ['fA', 'fD', 'fS', 'fR'],
     'aenv-knobs':   ['aA', 'aD', 'aS', 'aR'],
     'uni-knobs':    ['uniVoices', 'uniDetune', 'uniSpread'],
@@ -994,7 +1072,8 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     preset('Harp Pluck',      { waveA:'saw', pluck:70, cutoff:9000, res:10, envAmt:0, aA:2, aD:1800, aS:0, aR:900, reverb:30 }),
     preset('Hollow Lead',     { waveA:'sqr', waveB:'pulse', morph:30, oddEven:-40, cutoff:3000, res:45, envAmt:25,
                                 fD:600, aA:5, aD:400, aS:85, aR:200, uniVoices:2, uniDetune:8 }),
-    preset('Supersaw',        { waveA:'saw', cutoff:7000, res:10, envAmt:10, uniVoices:8, uniDetune:25, uniSpread:90, aR:500, reverb:25 }),
+    preset('Supersaw',        { waveA:'saw', cutoff:7000, res:10, envAmt:10, uniVoices:8, uniDetune:25, uniSpread:90, aR:500, reverb:25,
+                                fxDly:true, dlyTime:375, dlyFb:30, dlyMix:18 }),
     preset('Drawbar Organ',   { waveA:'organ', cutoff:12000, res:0, envAmt:0, keytrack:0, aA:5, aD:100, aS:100, aR:80, reverb:25 }),
     preset('Vowel Sweep',     { waveA:'saw', ftype:'bp', cutoff:700, res:70, envAmt:45, keytrack:30, fA:400, fD:1400, fS:40, fR:900,
                                 aA:20, aD:800, aS:80, aR:600, uniVoices:2, uniDetune:6, reverb:30 }),
@@ -1005,13 +1084,14 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     preset('Metal Sweep',     { waveA:'sqr', prism:30, prismEnv:40, cutoff:6000, envAmt:20, fA:5, fD:1500, fS:0, fR:800,
                                 aD:2000, aS:40, aR:900, reverb:30 }),
     preset('Phaser Pad',      { waveA:'saw', waveB:'organ', morph:30, phDepth:80, phNotches:1.5, phSpeed:0.15, cutoff:6000, envAmt:10,
-                                aA:500, aD:1500, aS:80, aR:1500, uniVoices:3, uniDetune:10, uniSpread:70, reverb:45 }),
+                                aA:500, aD:1500, aS:80, aR:1500, uniVoices:3, uniDetune:10, uniSpread:70, reverb:45, fxCho:true, choRate:0.4, choMix:40 }),
     preset('Fifth Lead',      { waveA:'saw', harmVoices:1, harmInterval:7, harmLevel:70, cutoff:3500, res:35, envAmt:30,
-                                uniVoices:2, uniDetune:6, aR:250, reverb:20 }),
+                                uniVoices:2, uniDetune:6, aR:250, reverb:20, fxDly:true, dlyTime:300, dlyFb:30, dlyMix:22 }),
     preset('Vibrato Lead',    { waveA:'saw', waveB:'sqr', morph:25, cutoff:4000, res:25, l1Shape:'sin', l1Rate:5.5, l1Delay:400, l1Retrig:true,
                                 modSrc0:'lfo1', modDst0:'pitch', modAmt0:3, aR:250, reverb:25 }),
     preset('Wobble Bass',     { waveA:'saw', cutoff:400, res:50, envAmt:0, keytrack:30, l1Shape:'sin', l1Rate:3, l1Retrig:true,
-                                modSrc0:'lfo1', modDst0:'cutoff', modAmt0:45, aA:2, aS:90, aR:120, uniVoices:2, uniDetune:10, reverb:5 }),
+                                modSrc0:'lfo1', modDst0:'cutoff', modAmt0:45, aA:2, aS:90, aR:120, uniVoices:2, uniDetune:10, reverb:5,
+                                fxDist:true, distDrive:35, distTone:5000, distMix:40, fxComp:true, compThresh:-20, compRatio:4, compGain:6 }),
     preset('Morph Pad',       { waveA:'sin', waveB:'saw', e3A:2500, e3D:3000, e3S:100, e3R:2000, modSrc0:'env3', modDst0:'morph', modAmt0:100,
                                 l2Shape:'tri', l2Rate:0.2, l2Retrig:false, modSrc1:'lfo2', modDst1:'prism', modAmt1:12,
                                 cutoff:6000, uniVoices:4, uniDetune:12, uniSpread:80, aA:800, aR:2000, reverb:50 }),
@@ -1037,7 +1117,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   window.addEventListener('pagehide', function(){ if (saveTimer) saveNow(); });
 
   // ---------- audio ----------
-  var ctx = null, node = null, masterGain = null, reverbSend = null, engineReady = false;
+  var ctx = null, node = null, masterGain = null, engineReady = false;
   var pendingMessages = [];
   function send(msg){ if (node) node.port.postMessage(msg); else pendingMessages.push(msg); }
   function sendParams(){ send({ type:'params', p: params }); }
@@ -1045,18 +1125,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   function initAudio(){
     if (ctx) return;
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    masterGain = ctx.createGain();
-    masterGain.connect(ctx.destination);
-
-    // Reverb: 2.4 s of stereo noise fading out, the family's simple convolution room.
-    var len = Math.floor(ctx.sampleRate * 2.4), ir = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (var ch = 0; ch < 2; ch++) {
-      var d = ir.getChannelData(ch);
-      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-    }
-    var conv = ctx.createConvolver(); conv.buffer = ir;
-    reverbSend = ctx.createGain();
-    masterGain.connect(reverbSend); reverbSend.connect(conv); conv.connect(ctx.destination);
+    buildFx();
     applyOutput();
 
     if (!ctx.audioWorklet) { document.getElementById('no-worklet').hidden = false; return; }
@@ -1065,7 +1134,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     var url = 'data:application/javascript;charset=utf-8,' + encodeURIComponent(source);
     ctx.audioWorklet.addModule(url).then(function(){
       node = new AudioWorkletNode(ctx, 'elf-charmor', { numberOfInputs: 0, outputChannelCount: [2] });
-      node.connect(masterGain);
+      node.connect(fx.dist.input);
       node.port.onmessage = function(e){ onEngineMessage(e.data); };
       engineReady = true;
       sendParams();
@@ -1073,11 +1142,94 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
       pendingMessages = [];
     }, function(){ document.getElementById('no-worklet').hidden = false; });
   }
+  // ---------- effects: DIST -> CHORUS -> DELAY -> REVERB -> COMP -> volume ----------
+  // Each unit: input -> dry -> output, and input -> effect -> wet -> output.
+  // Off is dry only; the knobs keep their settings.
+  var fx = {}, shownDrive = null, shownSize = null, reverbTimer = null;
+  function buildFx(){
+    function unit(){
+      var u = { input: ctx.createGain(), dry: ctx.createGain(), wet: ctx.createGain(), output: ctx.createGain() };
+      u.input.connect(u.dry); u.dry.connect(u.output); u.wet.connect(u.output);
+      return u;
+    }
+    function lowpass(){ var f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = -3.0103; return f; }   // Butterworth, Q in dB
+
+    fx.dist = unit();
+    fx.shaper = ctx.createWaveShaper(); fx.shaper.oversample = '2x';
+    fx.distTone = lowpass();
+    fx.dist.input.connect(fx.shaper); fx.shaper.connect(fx.distTone); fx.distTone.connect(fx.dist.wet);
+
+    // Chorus: a short delay per side, swept in opposite directions by one LFO.
+    fx.cho = unit();
+    var split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(2);
+    fx.choL = ctx.createDelay(0.05); fx.choR = ctx.createDelay(0.05);
+    fx.choL.delayTime.value = fx.choR.delayTime.value = 0.012;
+    fx.choLfo = ctx.createOscillator(); fx.choDepthL = ctx.createGain(); fx.choDepthR = ctx.createGain();
+    fx.cho.input.connect(split);
+    split.connect(fx.choL, 0); split.connect(fx.choR, 1);
+    fx.choL.connect(merge, 0, 0); fx.choR.connect(merge, 0, 1); merge.connect(fx.cho.wet);
+    fx.choLfo.connect(fx.choDepthL); fx.choDepthL.connect(fx.choL.delayTime);
+    fx.choLfo.connect(fx.choDepthR); fx.choDepthR.connect(fx.choR.delayTime);
+    fx.choLfo.start();
+
+    // Delay: echoes darkening as they repeat.
+    fx.dly = unit();
+    fx.delay = ctx.createDelay(2); fx.dlyFb = ctx.createGain(); fx.dlyTone = lowpass(); fx.dlyTone.frequency.value = 6000;
+    fx.dly.input.connect(fx.delay); fx.delay.connect(fx.dlyTone); fx.dlyTone.connect(fx.dlyFb); fx.dlyFb.connect(fx.delay);
+    fx.dlyTone.connect(fx.dly.wet);
+
+    fx.rev = unit();
+    fx.conv = ctx.createConvolver();
+    fx.rev.input.connect(fx.conv); fx.conv.connect(fx.rev.wet);
+
+    fx.comp = unit();
+    fx.compressor = ctx.createDynamicsCompressor(); fx.makeup = ctx.createGain();
+    fx.compressor.knee.value = 6; fx.compressor.attack.value = 0.005; fx.compressor.release.value = 0.2;
+    fx.comp.input.connect(fx.compressor); fx.compressor.connect(fx.makeup); fx.makeup.connect(fx.comp.wet);
+
+    masterGain = ctx.createGain();
+    fx.dist.output.connect(fx.cho.input); fx.cho.output.connect(fx.dly.input); fx.dly.output.connect(fx.rev.input);
+    fx.rev.output.connect(fx.comp.input); fx.comp.output.connect(masterGain); masterGain.connect(ctx.destination);
+  }
+  // Reverb room: SIZE seconds of stereo noise fading out, the family's simple convolution room.
+  function buildReverb(){
+    var len = Math.max(1, Math.floor(ctx.sampleRate * params.revSize)), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (var ch = 0; ch < 2; ch++) {
+      var d = ir.getChannelData(ch);
+      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    }
+    fx.conv.buffer = ir; shownSize = params.revSize;
+  }
   function applyOutput(){
     if (!ctx) return;
-    var t = ctx.currentTime;
-    masterGain.gain.setTargetAtTime(params.volume / 100, t, 0.01);
-    reverbSend.gain.setTargetAtTime(params.reverb / 100 * 0.6, t, 0.01);
+    var t = ctx.currentTime, p = params;
+    function mix(u, on, dry, wet){ u.dry.gain.setTargetAtTime(on ? dry : 1, t, 0.01); u.wet.gain.setTargetAtTime(on ? wet : 0, t, 0.01); }
+    if (shownDrive !== p.distDrive) {   // the drive curve: tanh(g x) / tanh(g), g from 1 to 20,
+      // scaled by 1/sqrt(g) so more drive means more grit rather than just more level
+      var n = 1024, curve = new Float32Array(n), g = 1 + p.distDrive / 100 * 19, comp = 1 / Math.sqrt(g);
+      for (var i = 0; i < n; i++) { var x = i / (n - 1) * 2 - 1; curve[i] = Math.tanh(g * x) / Math.tanh(g) * comp; }
+      fx.shaper.curve = curve; shownDrive = p.distDrive;
+    }
+    fx.distTone.frequency.setTargetAtTime(p.distTone, t, 0.01);
+    mix(fx.dist, p.fxDist, 1 - p.distMix / 100, p.distMix / 100);
+    fx.choLfo.frequency.setTargetAtTime(p.choRate, t, 0.01);
+    fx.choDepthL.gain.setTargetAtTime(p.choDepth / 100 * 0.004, t, 0.01);
+    fx.choDepthR.gain.setTargetAtTime(-p.choDepth / 100 * 0.004, t, 0.01);
+    mix(fx.cho, p.fxCho, 1 - p.choMix / 200, p.choMix / 100);
+    fx.delay.delayTime.setTargetAtTime(p.dlyTime / 1000, t, 0.02);
+    fx.dlyFb.gain.setTargetAtTime(p.dlyFb / 100 * 0.9, t, 0.01);
+    mix(fx.dly, p.fxDly, 1, p.dlyMix / 100);
+    if (shownSize === null) buildReverb();
+    else if (shownSize !== p.revSize) { clearTimeout(reverbTimer); reverbTimer = setTimeout(buildReverb, 200); }
+    mix(fx.rev, p.fxRev, 1, p.reverb / 100 * 0.6);
+    fx.compressor.threshold.setTargetAtTime(p.compThresh, t, 0.01);
+    fx.compressor.ratio.setTargetAtTime(p.compRatio, t, 0.01);
+    // Web Audio's compressor adds its own make-up gain (0.6 of the reduction at 0 dBFS);
+    // take it back out so GAIN is the only make-up.
+    var autoMakeup = -0.6 * p.compThresh * (1 - 1 / p.compRatio);
+    fx.makeup.gain.setTargetAtTime(Math.pow(10, (p.compGain - autoMakeup) / 20), t, 0.01);
+    mix(fx.comp, p.fxComp, 0, 1);
+    masterGain.gain.setTargetAtTime(p.volume / 100, t, 0.01);
   }
 
   function setPower(on){
@@ -1128,6 +1280,9 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     if (def.unit === 'st') return (v > 0.5 ? '+' : '') + Math.round(v) + 'st';
     if (def.unit === 'hz') return v.toFixed(v < 1 ? 2 : 1) + 'Hz';
     if (def.unit === '/oct') return v.toFixed(v < 2 ? 2 : 1);
+    if (def.unit === 's') return v.toFixed(1) + 's';
+    if (def.unit === 'dB') return Math.round(v) + 'dB';
+    if (def.unit === ':1') return v.toFixed(v < 10 ? 1 : 0) + ':1';
     return Math.round(v) + def.unit;
   }
   function toT(def, v){
@@ -1196,10 +1351,21 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
 
   // RETRIG switches
   var toggles = { l1Retrig: document.getElementById('l1-retrig'), l2Retrig: document.getElementById('l2-retrig') };
+  // Effect on/off slide switches
+  var fxSwitches = {};
+  document.querySelectorAll('.fx-unit').forEach(function(u){
+    var key = u.dataset.param, input = u.querySelector('input');
+    fxSwitches[key] = { unit: u, input: input };
+    input.addEventListener('change', function(){ params[key] = input.checked; renderToggles(); changed(key); });
+  });
   Object.keys(toggles).forEach(function(key){
     toggles[key].addEventListener('click', function(){ params[key] = !params[key]; renderToggles(); changed(key); });
   });
   function renderToggles(){
+    Object.keys(fxSwitches).forEach(function(key){
+      fxSwitches[key].input.checked = !!params[key];
+      fxSwitches[key].unit.classList.toggle('is-off', !params[key]);
+    });
     Object.keys(toggles).forEach(function(key){
       toggles[key].classList.toggle('is-active', !!params[key]);
       toggles[key].setAttribute('aria-pressed', params[key] ? 'true' : 'false');

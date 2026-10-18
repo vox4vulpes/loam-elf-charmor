@@ -47,8 +47,11 @@ the filter curve shaping them; with nothing playing, it previews C4.
   (±1 to ±12, shown on the wheel); the button over the mod wheel steps
   **VIB** (vibrato), **FILT** (opens the filter up to 4 octaves) and **MTRX**
   (only through the matrix). Presets keep their wheel setup
-- **Output** — volume and reverb
-- **Presets** — factory sounds, and your own (kept in this browser)
+- **FX** page — **DIST** (drive, tone, mix), **CHORUS** (rate, depth, mix),
+  **DELAY** (time, feedback, mix), **REVERB** (size, mix) and **COMP**
+  (threshold, ratio, gain), in that order, each with its own switch
+- **Output** — volume
+- **Presets** — factory sounds (wheels and effects included), and your own (kept in this browser)
 
 ## Playing it
 

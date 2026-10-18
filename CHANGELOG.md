@@ -10,7 +10,7 @@ release workflow refuses to publish a version that has no section here.
   to 256 harmonics each, built from two timbres (SIN, SAW, SQR, TRI, PULSE,
   ORGAN) with MORPH, ODD/EVEN and PLUCK; a spectral LP / BP / HP filter with
   resonance, envelope and key tracking; filter and amp envelopes; unison up to
-  8 copies with detune and stereo spread; volume and reverb.
+  8 copies with detune and stereo spread; volume.
 - Spectral effects: **Prism** (harmonics stretched or squeezed off the
   harmonic series, also by the filter envelope), **Phaser** (moving notches
   across the spectrum), **Harmonizer** (up to two extra copies of each note an
@@ -18,6 +18,8 @@ release workflow refuses to publish a version that has no section here.
 - **Mod page**: two LFOs, two more envelopes and a six-slot mod matrix
   (envelopes, LFOs, velocity, mod wheel → pitch, cutoff, resonance, morph,
   odd/even, prism, phaser offset, blur, pluck, detune, volume, pan).
+- **FX page**: distortion, chorus, delay, reverb and compressor in a chain,
+  each with its own on/off switch; the reverb moved here from Output.
 - **Pitch and mod wheels** as on Loam Eight Sub: bend range ± on the pitch
   wheel, VIB / FILT / MTRX on the mod wheel, kept with presets.
 - A spectrum screen showing the harmonics of the newest note and the filter
