@@ -1724,7 +1724,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     return canvas.height * (1 - Math.max(0, (db + DB_RANGE) / (DB_RANGE + 12)));
   }
   function drawScreen(f0, cutoff, amps, label, stretch, lfo){
-    var W = canvas.width, H = canvas.height, dpr = window.devicePixelRatio || 1;
+    var ep = effectiveParams(), W = canvas.width, H = canvas.height, dpr = window.devicePixelRatio || 1;
     g.clearRect(0, 0, W, H);
     // octave grid
     g.strokeStyle = 'rgba(240,168,48,.08)'; g.lineWidth = 1;
@@ -1747,7 +1747,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     g.strokeStyle = 'rgba(126,196,190,.9)'; g.lineWidth = 1.5 * dpr; g.beginPath();
     for (var px = 0; px <= W; px += 2) {
       var fx = FMIN * Math.pow(FMAX / FMIN, px / W);
-      var fy = yOf(filterGain(params.ftype, fx, cutoff, params.res) * phaserGain(params, fx, lfo) / 4);
+      var fy = yOf(filterGain(ep.ftype, fx, cutoff, ep.res) * phaserGain(ep, fx, lfo) / 4);
       if (px === 0) g.moveTo(px, fy); else g.lineTo(px, fy);
     }
     g.stroke();
@@ -1757,10 +1757,10 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   var lastFrame = null, liveUntil = 0, previewAmps = new Float64Array(MAX_PARTIALS + 1), previewScratch = new Float64Array(MAX_PARTIALS + 1);
   function drawPreview(){
     if (performance.now() < liveUntil) return;
-    var f0 = 261.63, fc = effectiveCutoff(params, f0, params.fS / 100), s = prismStretch(params, params.fS / 100);
+    var ep = effectiveParams(), f0 = 261.63, fc = effectiveCutoff(ep, f0, ep.fS / 100), s = prismStretch(ep, ep.fS / 100);
     var K = 1;
     while (K < MAX_PARTIALS && f0 * partialRatio(K + 1, s) < 20000) K++;
-    voiceAmps(timbres, params, f0, K, fc, s, 0, 0, previewAmps, previewScratch, imageColumnZero());
+    voiceAmps(timbres, ep, f0, K, fc, s, 0, 0, previewAmps, previewScratch, imageColumnZero());
     drawScreen(f0, fc, previewAmps.subarray(0, K + 1), 'PREVIEW · C4', s, 0);
   }
   function onEngineMessage(m){
@@ -2038,18 +2038,19 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   addGraph('e2-knobs', 'env', 'e2', '#e08a74');
   addGraph('e3-knobs', 'env', 'e3', '#e08a74');
 
+  var gp = params;   // the values the graphs draw
   function graphLabel(g2, text, x, y, align){
     g2.fillStyle = 'rgba(240,168,48,.55)'; g2.font = (9 * (window.devicePixelRatio || 1)) + 'px "IBM Plex Mono", monospace';
     g2.textAlign = align; g2.fillText(text, x, y);
   }
   function rndHeld(n){ var x = Math.sin((n + 1) * 78.233) * 43758.5453; return (x - Math.floor(x)) * 2 - 1; }   // RND, repeatable for drawing
   function lfoAt(pre, t){
-    var rate = params[pre + 'Rate'], delay = params[pre + 'Delay'] / 1000;
+    var rate = gp[pre + 'Rate'], delay = gp[pre + 'Delay'] / 1000;
     var fade = delay > 0 ? Math.min(1, t / delay) : 1, cyc = t * rate;
-    return lfoShape(params[pre + 'Shape'], cyc - Math.floor(cyc), rndHeld(Math.floor(cyc))) * fade;
+    return lfoShape(gp[pre + 'Shape'], cyc - Math.floor(cyc), rndHeld(Math.floor(cyc))) * fade;
   }
   function drawLfo(gr, g2, W, H, dpr){
-    var pre = gr.pre, rate = params[pre + 'Rate'], delay = params[pre + 'Delay'] / 1000;
+    var pre = gr.pre, rate = gp[pre + 'Rate'], delay = gp[pre + 'Delay'] / 1000;
     var T = Math.min(20, Math.max(2 / rate, delay + 1.5 / rate)), mid = H / 2, amp = H / 2 - 6 * dpr;
     g2.strokeStyle = 'rgba(240,168,48,.12)'; g2.lineWidth = 1;
     g2.beginPath(); g2.moveTo(0, mid); g2.lineTo(W, mid); g2.stroke();
@@ -2065,19 +2066,19 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
       if (px === 0) g2.moveTo(px, y); else g2.lineTo(px, y);
     }
     g2.stroke();
-    graphLabel(g2, rate.toFixed(rate < 1 ? 2 : 1) + ' Hz' + (params[pre + 'Retrig'] ? ' \u00b7 RETRIG' : ''), 4 * dpr, H - 4 * dpr, 'left');
+    graphLabel(g2, rate.toFixed(rate < 1 ? 2 : 1) + ' Hz' + (gp[pre + 'Retrig'] ? ' \u00b7 RETRIG' : ''), 4 * dpr, H - 4 * dpr, 'left');
     graphLabel(g2, T.toFixed(T < 10 ? 1 : 0) + ' s', W - 4 * dpr, H - 4 * dpr, 'right');
     if (liveMod) {
       var ph = liveMod.lfo[pre === 'l1' ? 0 : 1];
       // a retriggered LFO is at the note's time; a free one at its phase in the first cycle
-      var t = params[pre + 'Retrig'] ? liveMod.t % T : ph / rate;
-      dot(g2, t / T * W, mid - lfoAt(pre, params[pre + 'Retrig'] ? liveMod.t : t) * amp, gr.color, dpr);
+      var t = gp[pre + 'Retrig'] ? liveMod.t % T : ph / rate;
+      dot(g2, t / T * W, mid - lfoAt(pre, gp[pre + 'Retrig'] ? liveMod.t : t) * amp, gr.color, dpr);
     }
   }
   // Envelope: each stage gets a width by the square root of its time, so a 2 ms
   // attack and a 6 s release both stay visible; sustain gets a fixed stretch.
   function drawEnv(gr, g2, W, H, dpr){
-    var pre = gr.pre, A = params[pre + 'A'], D = params[pre + 'D'], S = params[pre + 'S'] / 100, R = params[pre + 'R'];
+    var pre = gr.pre, A = gp[pre + 'A'], D = gp[pre + 'D'], S = gp[pre + 'S'] / 100, R = gp[pre + 'R'];
     var wa = Math.sqrt(A), wd = Math.sqrt(D), ws = Math.sqrt(600), wr = Math.sqrt(R), k = W / (wa + wd + ws + wr);
     wa *= k; wd *= k; ws *= k; wr *= k;
     var top = 8 * dpr, bottom = H - 14 * dpr;
@@ -2113,6 +2114,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   }
   function drawGraphs(){
     if (!graphs) return;   // a saved page can be shown before the graphs exist
+    gp = effectiveParams();   // what's heard, so CUST knobs on the wheel move the graphs too
     var dpr = window.devicePixelRatio || 1;
     graphs.forEach(function(gr){
       var c = gr.canvas;
@@ -2150,7 +2152,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   // CUST: the knobs on the wheel follow it, and the sound gets their new values.
   function refreshCustom(){
     Object.keys(params.custMap).forEach(function(id){ if (knobRenders[id]) knobRenders[id](); });
-    sendParams(); applyOutput();
+    sendParams(); applyOutput(); drawGraphs(); drawPreview();
   }
   function wheelDrag(el, set, bipolar){
     var dragging = false;
