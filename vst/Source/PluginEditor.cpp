@@ -744,6 +744,8 @@ LoamKeyboard::LoamKeyboard (juce::MidiKeyboardState& state)
         setKeyPressForNote (juce::KeyPress (keyCaps[i], 0, 0), i);
     setScrollButtonsVisible (false);
     setVelocity (0.9f, false);   // the web keys play at 0.9
+    setColour (keyDownOverlayColourId, mustard.withAlpha (0.75f));   // a pressed key turns mustard, as on the web
+    setColour (mouseOverKeyOverlayColourId, mustard.withAlpha (0.2f));
     setBaseNote (baseNote);
 }
 
@@ -1067,7 +1069,7 @@ LoamCharmorEditor::LoamCharmorEditor (LoamCharmorProcessor& p)
         }
     for (int i = 0; i < modSlots; ++i)
     {
-        auto* arrow = smallLabels.add (new juce::Label ({}, utf8 ("\xe2\x86\x92")));
+        auto* arrow = smallLabels.add (new juce::Label ({}, ">"));   // the default fonts have no arrow glyph
         arrow->setFont (sansFont (12.0f));
         arrow->setJustificationType (juce::Justification::centred);
         pages[1].addAndMakeVisible (arrow);
@@ -1423,6 +1425,13 @@ void LoamCharmorEditor::timerCallback()
         imageView.refresh (live ? snap.imgPos : -1.0);
     for (auto& [id, k] : knobs)
         k->refresh();
+    // An effect switched off dims its knobs, which stay adjustable.
+    static const std::vector<std::vector<const char*>> unitKnobs { { "distDrive", "distTone", "distMix" }, { "choRate", "choDepth", "choMix" },
+                                                                   { "dlyTime", "dlyFb", "dlyMix" }, { "revSize", "reverb" },
+                                                                   { "compThresh", "compRatio", "compGain" } };
+    for (int u = 0; u < fxSwitches.size(); ++u)
+        for (auto* id : unitKnobs[(size_t) u])
+            knob (id).setAlpha (fxSwitches[u]->getToggleState() ? 1.0f : 0.42f);
     pitchWheel.refresh();
     modWheel.refresh();
 
