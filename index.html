@@ -253,7 +253,14 @@
   body.mod-custom .knob.is-bound .mod-dot{display:block;}
   .knob.is-modded .knob-cap{cursor:default;}
   .knob-label{font-size:9px; font-weight:600; letter-spacing:.05em; color:var(--ink-soft); text-transform:uppercase; white-space:nowrap;}
-  .knob-readout{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .knob-readout{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap; cursor:text; border-radius:3px; padding:0 2px;}
+  .knob-readout:hover{background:rgba(42,36,29,.08);}
+  /* Click a value to type one in. */
+  .knob-input{
+    width:54px; padding:0 2px; margin:0; text-align:center; border-radius:3px;
+    font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink);
+    background:var(--panel); border:1px solid var(--focus); outline:none;
+  }
 
   /* ---------- keyboard ---------- */
   .keybed-bay{
@@ -1436,6 +1443,18 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     return def.step ? Math.round(v / def.step) * def.step : v;
   }
   var knobRenders = {};
+  // A typed value: a number with an optional unit -- 4.5k, 4500, 250ms, 1.5s, +7,
+  // 30% -- clamped to the knob's range. Null if it isn't a number.
+  function parseKnobValue(def, text){
+    var m = String(text).trim().toLowerCase().replace(',', '.').match(/^([+-]?\d*\.?\d+)\s*(khz|k|hz|ms|s|%|st|db|:1|\u00a2|c|\/oct)?$/);
+    if (!m) return null;
+    var v = parseFloat(m[1]), u = m[2] || '';
+    if (u === 'k' || u === 'khz') v *= 1000;
+    if (def.unit === 'ms' && u === 's') v *= 1000;
+    if (def.unit === 's' && u === 'ms') v /= 1000;
+    if (def.step) v = Math.round(v / def.step) * def.step;
+    return Math.min(def.max, Math.max(def.min, v));
+  }
   function buildKnob(id, accent){
     var def = KNOBS[id];
     var el = document.createElement('div');
@@ -1490,6 +1509,29 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
       ['pointerup', 'pointercancel'].forEach(function(type){ dot.addEventListener(type, function(){ draggingDot = false; }); });
     });
     function set(v){ params[id] = v; render(); changed(id); }
+    // Click the value to type one: Enter or clicking away sets it, Escape keeps the old one.
+    readout.addEventListener('click', function(e){
+      e.stopPropagation();
+      if (el.querySelector('.knob-input')) return;
+      var input = document.createElement('input'), done = false;
+      input.className = 'knob-input'; input.type = 'text'; input.setAttribute('aria-label', def.label + ' value');
+      input.value = String(Math.round(params[id] * 100) / 100);
+      readout.hidden = true; readout.parentNode.insertBefore(input, readout.nextSibling);
+      input.focus(); input.select();
+      function finish(apply){
+        if (done) return;
+        done = true;
+        var v = apply ? parseKnobValue(def, input.value) : null;
+        input.remove(); readout.hidden = false;
+        if (v !== null) set(v);
+      }
+      input.addEventListener('keydown', function(ev){
+        ev.stopPropagation();
+        if (ev.key === 'Enter') finish(true);
+        else if (ev.key === 'Escape') finish(false);
+      });
+      input.addEventListener('blur', function(){ finish(true); });
+    });
     var drag = null;
     cap.addEventListener('pointerdown', function(e){
       if (modded()) return;   // the mod wheel is driving it

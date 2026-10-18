@@ -33,6 +33,7 @@ release workflow refuses to publish a version that has no section here.
 - A spectrum screen showing the harmonics of the newest note and the filter
   curve, or a preview of C4 while nothing plays.
 - Nineteen factory presets and your own, saved in the browser.
+- Click a knob's value to type one in (`4.5k`, `250ms`, `1.5s`, `+7`...).
 - Computer-keyboard and MIDI play (notes, sustain pedal, pitch wheel).
 - A pixel-art elf girl as the browser-tab and app icon, and the little egret
   beside the name.

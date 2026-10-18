@@ -64,6 +64,9 @@ the filter curve shaping them; with nothing playing, it previews C4.
 - **Output** — volume
 - **Presets** — factory sounds (wheels and effects included), and your own (kept in this browser)
 
+Turn a knob by dragging it up or down, double-click it for its default, or
+click its value and type one: `4.5k`, `250ms`, `1.5s`, `+7`, `30%`.
+
 ## Playing it
 
 Flip the power switch, then play two octaves from your computer keyboard,
