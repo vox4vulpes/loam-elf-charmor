@@ -106,7 +106,7 @@
   #spectrum{width:100%; height:140px; display:block; border-radius:6px; background:var(--readout-bg);}
   .screen-caption{
     display:flex; justify-content:space-between;
-    font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:.15em; color:rgba(240,168,48,.5); margin-top:4px;
+    font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:.15em; color:var(--ink); opacity:.75; margin-top:4px;
   }
 
   /* ---------- modules ---------- */
@@ -123,7 +123,8 @@
       grid-template-areas:
         "presets presets presets presets presets presets"
         "timbre  timbre  timbre  filter  filter  out"
-        "fenv    fenv    aenv    aenv    uni     uni";
+        "fenv    fenv    aenv    aenv    uni     uni"
+        "prism   phaser  phaser  harm    harm    blur";
     }
     .modules > *{grid-area:var(--area);}
   }
@@ -292,6 +293,26 @@
       <h2 class="module-title">Unison</h2>
       <div class="knob-row" id="uni-knobs"></div>
     </section>
+
+    <section class="module" style="--accent:var(--coral); --area:prism" title="Pushes the harmonics off the harmonic series: bells, metal">
+      <h2 class="module-title">Prism</h2>
+      <div class="knob-row" id="prism-knobs"></div>
+    </section>
+
+    <section class="module" style="--accent:var(--teal); --area:phaser" title="Notches across the spectrum, a few per octave, sliding">
+      <h2 class="module-title">Phaser</h2>
+      <div class="knob-row" id="phaser-knobs"></div>
+    </section>
+
+    <section class="module" style="--accent:var(--sage); --area:harm" title="Extra copies of every note, an interval apart">
+      <h2 class="module-title">Harmonizer</h2>
+      <div class="knob-row" id="harm-knobs"></div>
+    </section>
+
+    <section class="module" style="--accent:var(--mustard); --area:blur" title="Smears the harmonics in time (TIME) and into each other (HARM)">
+      <h2 class="module-title">Blur</h2>
+      <div class="knob-row" id="blur-knobs"></div>
+    </section>
   </div>
 
   <div class="keybed-bay">
@@ -363,6 +384,49 @@ function effectiveCutoff(p, f0, fenv){
 function pluckGain(p, k, t){
   return p.pluck > 0 ? Math.exp(-p.pluck / 100 * 3 * (k - 1) * t) : 1;
 }
+
+// PRISM: harmonic k moves to k^(1 + s). s > 0 stretches the series upward
+// (bells, metal), s < 0 squeezes it; ENV lets the filter envelope push it.
+function prismStretch(p, fenv){
+  return Math.max(-0.5, Math.min(0.5, (p.prism + p.prismEnv * fenv) / 100 * 0.5));
+}
+function partialRatio(k, s){ return s === 0 ? k : Math.pow(k, 1 + s); }
+
+// PHASER: notches evenly spread in log frequency, NOTCHES per octave, slid
+// along by OFFSET and, at SPEED, by the phaser's own LFO (in cycles).
+function phaserGain(p, f, lfo){
+  if (p.phDepth <= 0) return 1;
+  var x = Math.log2(f / 20) * p.phNotches + p.phOffset / 100 + lfo;
+  return 1 - p.phDepth / 100 * (0.5 - 0.5 * Math.cos(2 * Math.PI * x));
+}
+
+// BLUR HARM: three passes that each mix every harmonic's level with its
+// neighbours'. Works on the levels; each harmonic keeps its own sign.
+function blurHarmonics(a, K, amount, scratch){
+  if (amount <= 0) return;
+  var h = amount / 100 * 0.5;
+  for (var k = 1; k <= K; k++) scratch[k] = Math.abs(a[k]);
+  for (var n = 0; n < 3; n++) {
+    var prev = scratch[1];
+    for (k = 1; k <= K; k++) {
+      var cur = scratch[k], next = k < K ? scratch[k + 1] : 0;
+      scratch[k] = cur * (1 - h) + (prev + next) * 0.5 * h;
+      prev = cur;
+    }
+  }
+  for (k = 1; k <= K; k++) a[k] = (a[k] < 0 ? -1 : 1) * scratch[k];
+}
+
+// Every harmonic's level for a voice: timbre, BLUR HARM, then the filter,
+// phaser and PLUCK at the harmonic's actual frequency (after PRISM).
+function voiceAmps(timbres, p, f0, K, fc, s, t, lfo, out, scratch){
+  for (var k = 1; k <= MAX_PARTIALS; k++) out[k] = k > K ? 0 : timbreAt(timbres, p, k);
+  blurHarmonics(out, K, p.blurHarm, scratch);
+  for (k = 1; k <= K; k++) {
+    var f = f0 * partialRatio(k, s);
+    out[k] *= filterGain(p.ftype, f, fc, p.res) * phaserGain(p, f, lfo) * pluckGain(p, k, t);
+  }
+}
 </script>
 
 <!-- The audio engine, run in an AudioWorklet. Every few milliseconds each voice
@@ -371,7 +435,9 @@ function pluckGain(p, k, t){
      and each unison copy then read that table at their own pitch and phase. -->
 <script type="text/plain" id="dsp-engine">
 var TABLE_N = 4096, TABLE_BITS = 12, UPDATE_BLOCKS = 2;   // a new table every 256 samples
-var NUM_VOICES = 8, MAX_UNISON = 8, BLOCK = 128, VOICE_GAIN = 0.12;
+var NUM_VOICES = 8, MAX_UNISON = 8, MAX_HARM = 2, BLOCK = 128, VOICE_GAIN = 0.12;
+var MAX_COPIES = MAX_UNISON * (MAX_HARM + 1);   // unison copies of the note and of each harmonizer voice
+var BANK_BUDGET = 1024;                          // sine partials per block for all voices, in PRISM mode
 
 var REV = new Uint16Array(TABLE_N), COS = new Float64Array(TABLE_N / 2), SIN = new Float64Array(TABLE_N / 2);
 for (var i = 0; i < TABLE_N; i++) {
@@ -381,6 +447,8 @@ for (var i = 0; i < TABLE_N; i++) {
 }
 for (i = 0; i < TABLE_N / 2; i++) { COS[i] = Math.cos(2 * Math.PI * i / TABLE_N); SIN[i] = Math.sin(2 * Math.PI * i / TABLE_N); }
 var fftRe = new Float64Array(TABLE_N), fftIm = new Float64Array(TABLE_N);
+var SINE = new Float64Array(TABLE_N + 1);   // for the PRISM partials
+for (i = 0; i <= TABLE_N; i++) SINE[i] = Math.sin(2 * Math.PI * i / TABLE_N);
 
 // out[n] = sum of amps[k] sin(2 pi k n / N), k = 1..K: one cycle of the waveform.
 function buildTable(amps, K, out){
@@ -406,11 +474,21 @@ function Voice(){
   this.vel = 1; this.t = 0; this.order = 0;
   this.amp = 0; this.ampStage = 0;   // 0 attack, 1 decay/sustain, 2 release
   this.fenv = 0; this.fStage = 0;
-  this.amps = new Float64Array(MAX_PARTIALS + 1);
+  this.amps = new Float64Array(MAX_PARTIALS + 1);      // what the voice plays now (after BLUR TIME)
+  this.target = new Float64Array(MAX_PARTIALS + 1);    // what it's heading for
+  this.scratch = new Float64Array(MAX_PARTIALS + 1);
+  // Table mode: the base table, and one with fewer harmonics for copies pitched up.
   this.prev = new Float64Array(TABLE_N + 1); this.next = new Float64Array(TABLE_N + 1);
+  this.prevHigh = new Float64Array(TABLE_N + 1); this.nextHigh = new Float64Array(TABLE_N + 1);
+  this.highReady = false;
   this.sinceUpdate = 0; this.fresh = true; this.level = 0;
-  this.uPhase = new Float64Array(MAX_UNISON);
-  this.f0 = 440; this.cutoff = 1000; this.count = 0;
+  this.phase = new Float64Array(MAX_COPIES);             // each copy's place in the cycle, 0..1
+  // PRISM mode: a bank of sine partials per copy.
+  this.bank = false;
+  this.bankPhase = new Float64Array(MAX_COPIES * (MAX_PARTIALS + 1));
+  this.bankAmps = new Float64Array(MAX_PARTIALS + 1);
+  this.oldAmps = new Float64Array(MAX_PARTIALS + 1);
+  this.f0 = 440; this.cutoff = 1000; this.count = 0; this.stretch = 0;
 }
 
 // Linear attack, then exponential moves; each time is how long to get ~99% there.
@@ -432,7 +510,10 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
     this.timbres = buildTimbres();
     this.voices = [];
     for (var i = 0; i < NUM_VOICES; i++) this.voices.push(new Voice());
-    this.p = null; this.bend = 0; this.sustain = false; this.counter = 0; this.blocks = 0;
+    this.p = null; this.bend = 0; this.sustain = false; this.counter = 0; this.blocks = 0; this.lfo = 0;
+    this.buf = new Float64Array(BLOCK);
+    // The copies of a note: pitch ratio, left and right gains.
+    this.cRatio = new Float64Array(MAX_COPIES); this.cL = new Float64Array(MAX_COPIES); this.cR = new Float64Array(MAX_COPIES);
     this.port.onmessage = (e) => this.onMessage(e.data);
     // Starting parameters and notes can come with the node (offline renders and tests).
     var init = options && options.processorOptions;
@@ -455,12 +536,13 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
     var v = this.voices.find((x) => x.active && x.note === note);
     if (!v) v = this.voices.find((x) => !x.active);
     if (!v) v = this.voices.reduce((a, b) => (a.order < b.order ? a : b));   // steal the oldest
-    if (!v.active) { v.amp = 0; v.fenv = 0; v.level = 0; }
+    if (!v.active) { v.amp = 0; v.fenv = 0; v.level = 0; v.amps.fill(0); v.bankAmps.fill(0); }
     v.fresh = v.note !== note || !v.active;   // a new pitch starts on its own table, no crossfade
     v.active = true; v.note = note; v.gate = true; v.sustained = false; v.vel = vel;
     v.t = 0; v.order = ++this.counter; v.ampStage = 0; v.fStage = 0;
-    // Each unison copy starts at a random point of the cycle, so the copies don't cancel.
-    for (var u = 0; u < MAX_UNISON; u++) v.uPhase[u] = u === 0 ? 0 : Math.random();
+    // Each copy starts at a random point of the cycle, so the copies don't cancel.
+    for (var c = 0; c < MAX_COPIES; c++) v.phase[c] = c === 0 ? 0 : Math.random();
+    if (v.bank) this.enterBank(v);
   }
 
   noteOff(note){
@@ -474,16 +556,114 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
 
   release(v){ v.gate = false; v.ampStage = 2; v.fStage = 2; }
 
-  // The voice's harmonics right now: timbre, then the spectral filter, then PLUCK.
-  updateTable(v, p, f0, K){
-    var fc = effectiveCutoff(p, f0, v.fenv);
-    for (var k = 1; k <= MAX_PARTIALS; k++) {
-      v.amps[k] = k > K ? 0 : timbreAt(this.timbres, p, k) * filterGain(p.ftype, k * f0, fc, p.res) * pluckGain(p, k, v.t);
+  // Every copy of a note: the unison spread, repeated for each harmonizer voice
+  // (INTERVAL apart, at LEVEL). Returns how many there are.
+  setupCopies(p){
+    var U = Math.max(1, Math.min(MAX_UNISON, Math.round(p.uniVoices)));
+    var H = Math.max(0, Math.min(MAX_HARM, Math.round(p.harmVoices)));
+    var hLevel = p.harmLevel / 100, norm = 1 / Math.sqrt(U * (1 + H * hLevel * hLevel)), n = 0;
+    for (var hv = 0; hv <= H; hv++) {
+      var hRatio = Math.pow(2, hv * p.harmInterval / 12), hGain = hv === 0 ? 1 : hLevel;
+      for (var u = 0; u < U; u++) {
+        var det = U === 1 ? 0 : p.uniDetune * (2 * u / (U - 1) - 1);
+        var pan = U === 1 ? 0 : p.uniSpread / 100 * (2 * u / (U - 1) - 1);
+        this.cRatio[n] = hRatio * Math.pow(2, det / 1200);
+        this.cL[n] = (U === 1 ? Math.SQRT1_2 * Math.sqrt(U) : Math.cos((pan + 1) * Math.PI / 4)) * norm * hGain;
+        this.cR[n] = (U === 1 ? Math.SQRT1_2 * Math.sqrt(U) : Math.sin((pan + 1) * Math.PI / 4)) * norm * hGain;
+        n++;
+      }
     }
-    var t = v.prev; v.prev = v.next; v.next = t;
-    buildTable(v.amps, K, v.next);
-    if (v.fresh) { v.prev.set(v.next); v.fresh = false; }
-    v.sinceUpdate = 0; v.f0 = f0; v.cutoff = fc; v.count = K;
+    return n;
+  }
+
+  // New harmonic levels: the voice's recipe, eased toward by BLUR TIME.
+  updateAmps(v, p, f0, K, s, dtStep){
+    var fc = effectiveCutoff(p, f0, v.fenv);
+    voiceAmps(this.timbres, p, f0, K, fc, s, v.t, this.lfo, v.target, v.scratch);
+    var keep = p.blurTime > 0 ? Math.exp(-dtStep / (p.blurTime / 1000)) : 0;
+    for (var k = 1; k <= MAX_PARTIALS; k++) v.amps[k] = v.target[k] + (v.amps[k] - v.target[k]) * keep;
+    v.f0 = f0; v.cutoff = fc; v.count = K; v.stretch = s;
+  }
+
+  // PRISM starts: every partial picks up where the waveform's cycle is, so the switch is seamless.
+  enterBank(v){
+    for (var c = 0; c < MAX_COPIES; c++)
+      for (var k = 1; k <= MAX_PARTIALS; k++) v.bankPhase[c * (MAX_PARTIALS + 1) + k] = (k * v.phase[c]) % 1;
+    v.bankAmps.set(v.amps);
+    v.bank = true;
+  }
+
+  renderTable(v, p, f0, copies, L, R, nyq){
+    // The base table holds every harmonic below Nyquist for the unison's highest copy;
+    // harmonizer copies pitched above that read a second table with fewer.
+    var baseMax = Math.pow(2, p.uniDetune / 1200), upMax = baseMax;
+    for (var c = 0; c < copies; c++) upMax = Math.max(upMax, this.cRatio[c]);
+    var K = Math.min(MAX_PARTIALS, Math.floor(nyq / (f0 * baseMax)));
+    var needHigh = upMax > baseMax * 1.0001, Kh = Math.min(K, Math.floor(nyq / (f0 * upMax)));
+    if (v.fresh || v.sinceUpdate >= UPDATE_BLOCKS) {
+      this.updateAmps(v, p, f0, K, 0, UPDATE_BLOCKS * BLOCK / sampleRate);
+      var t = v.prev; v.prev = v.next; v.next = t;
+      buildTable(v.amps, K, v.next);
+      if (needHigh) {
+        t = v.prevHigh; v.prevHigh = v.nextHigh; v.nextHigh = t;
+        buildTable(v.amps, Kh, v.nextHigh);
+        if (!v.highReady || v.fresh) { v.prevHigh.set(v.nextHigh); v.highReady = true; }
+      } else v.highReady = false;
+      if (v.fresh) { v.prev.set(v.next); v.fresh = false; }
+      v.sinceUpdate = 0;
+    }
+    var dw = 1 / UPDATE_BLOCKS / BLOCK, e0 = v.level, e1 = v.amp * v.vel * VOICE_GAIN, de = (e1 - e0) / BLOCK;
+    for (c = 0; c < copies; c++) {
+      var high = needHigh && this.cRatio[c] > baseMax * 1.0001;
+      var prev = high ? v.prevHigh : v.prev, next = high ? v.nextHigh : v.next;
+      var inc = f0 * this.cRatio[c] / sampleRate * TABLE_N, ph = v.phase[c] * TABLE_N;
+      var gl = this.cL[c], gr = this.cR[c], w = v.sinceUpdate / UPDATE_BLOCKS, e = e0;
+      for (var i = 0; i < BLOCK; i++) {
+        var i0 = ph | 0, fr = ph - i0;
+        var x0 = prev[i0] + (prev[i0 + 1] - prev[i0]) * fr;
+        var x1 = next[i0] + (next[i0 + 1] - next[i0]) * fr;
+        var s = (x0 + (x1 - x0) * w) * e;
+        L[i] += s * gl; if (R !== L) R[i] += s * gr;
+        ph += inc; if (ph >= TABLE_N) ph -= TABLE_N;
+        w += dw; e += de;
+      }
+      v.phase[c] = ph / TABLE_N;
+    }
+    v.level = e1; v.sinceUpdate++;
+  }
+
+  renderBank(v, p, f0, s, copies, L, R, nyq, active){
+    if (!v.bank) this.enterBank(v);
+    var K = Math.min(MAX_PARTIALS, Math.floor(BANK_BUDGET / (copies * active)));
+    while (K > 1 && f0 * partialRatio(K, s) >= nyq) K--;   // the stretched series reaches Nyquist sooner
+    K = Math.max(1, K);
+    var old = v.oldAmps;
+    old.set(v.bankAmps);
+    this.updateAmps(v, p, f0, K, s, BLOCK / sampleRate);
+    var e0 = v.level, e1 = v.amp * v.vel * VOICE_GAIN, de = (e1 - e0) / BLOCK, buf = this.buf;
+    for (var c = 0; c < copies; c++) {
+      buf.fill(0);
+      var base = c * (MAX_PARTIALS + 1), fc0 = f0 * this.cRatio[c] / sampleRate;
+      for (var k = 1; k <= K; k++) {
+        var inc = fc0 * partialRatio(k, s);
+        if (inc >= 0.48) break;
+        var amp = old[k], dAmp = (v.amps[k] - amp) / BLOCK;
+        if (Math.abs(amp) < 1e-7 && Math.abs(v.amps[k]) < 1e-7) continue;
+        var ph = v.bankPhase[base + k];
+        for (var i = 0; i < BLOCK; i++) {
+          var x = ph * TABLE_N, i0 = x | 0;
+          buf[i] += amp * (SINE[i0] + (SINE[i0 + 1] - SINE[i0]) * (x - i0));
+          amp += dAmp; ph += inc;
+          if (ph >= 1) ph -= 1;
+        }
+        v.bankPhase[base + k] = ph;
+      }
+      var gl = this.cL[c], gr = this.cR[c], e = e0;
+      for (i = 0; i < BLOCK; i++) { L[i] += buf[i] * e * gl; if (R !== L) R[i] += buf[i] * e * gr; e += de; }
+      v.phase[c] = v.bankPhase[base + 1];   // so leaving PRISM picks up the cycle where it is
+    }
+    v.bankAmps.set(v.amps);
+    v.level = e1;
   }
 
   process(inputs, outputs){
@@ -491,8 +671,9 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
     var p = this.p;
     if (!p) return true;
     var dt = BLOCK / sampleRate, nyq = sampleRate * 0.48;
-    var U = Math.max(1, Math.min(MAX_UNISON, Math.round(p.uniVoices))), uniNorm = 1 / Math.sqrt(U);
-    var newest = null;
+    var copies = this.setupCopies(p), newest = null, active = 0;
+    this.lfo = (this.lfo + p.phSpeed * dt) % 1;
+    this.voices.forEach((x) => { if (x.active) active++; });
 
     for (var vi = 0; vi < this.voices.length; vi++) {
       var v = this.voices[vi];
@@ -503,42 +684,23 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
       if (v.ampStage === 2 && v.amp < 1e-4) { v.active = false; continue; }
 
       var f0 = 440 * Math.pow(2, (v.note - 69 + this.bend) / 12);
-      var K = Math.min(MAX_PARTIALS, Math.floor(nyq / (f0 * Math.pow(2, p.uniDetune / 1200))));
-      if (v.fresh || v.sinceUpdate >= UPDATE_BLOCKS) this.updateTable(v, p, f0, K);
-
-      var w0 = v.sinceUpdate / UPDATE_BLOCKS, dw = 1 / UPDATE_BLOCKS / BLOCK;
-      var e0 = v.level, e1 = v.amp * v.vel * VOICE_GAIN, de = (e1 - e0) / BLOCK;
-      var prev = v.prev, next = v.next;
-      for (var u = 0; u < U; u++) {
-        var det = U === 1 ? 0 : p.uniDetune * (2 * u / (U - 1) - 1);
-        var pan = U === 1 ? 0 : p.uniSpread / 100 * (2 * u / (U - 1) - 1);
-        var gl = U === 1 ? Math.SQRT1_2 : Math.cos((pan + 1) * Math.PI / 4) * uniNorm;
-        var gr = U === 1 ? Math.SQRT1_2 : Math.sin((pan + 1) * Math.PI / 4) * uniNorm;
-        var inc = f0 * Math.pow(2, det / 1200) / sampleRate * TABLE_N, ph = v.uPhase[u] * TABLE_N;
-        var w = w0, e = e0;
-        for (var i = 0; i < BLOCK; i++) {
-          var i0 = ph | 0, fr = ph - i0;
-          var x0 = prev[i0] + (prev[i0 + 1] - prev[i0]) * fr;
-          var x1 = next[i0] + (next[i0 + 1] - next[i0]) * fr;
-          var s = (x0 + (x1 - x0) * w) * e;
-          L[i] += s * gl; if (R !== L) R[i] += s * gr;
-          ph += inc; if (ph >= TABLE_N) ph -= TABLE_N;
-          w += dw; e += de;
-        }
-        v.uPhase[u] = ph / TABLE_N;
+      var s = prismStretch(p, v.fenv);
+      if (Math.abs(s) > 1e-4) this.renderBank(v, p, f0, s, copies, L, R, nyq, active);
+      else {
+        if (v.bank) { v.bank = false; v.fresh = true; }   // back to tables, from the cycle's current place
+        this.renderTable(v, p, f0, copies, L, R, nyq);
       }
-      v.level = e1; v.sinceUpdate++; v.t += dt;
+      v.t += dt;
       if (!newest || v.order > newest.order) newest = v;
     }
 
     // The screen: the newest voice's harmonics, about 30 times a second.
     if (++this.blocks % 12 === 0) {
-      var count = 0;
-      this.voices.forEach((x) => { if (x.active) count++; });
       if (newest) {
         var amps = new Float32Array(newest.count + 1);
         for (var k = 1; k <= newest.count; k++) amps[k] = newest.amps[k] * newest.level;
-        this.port.postMessage({ type: 'spectrum', f0: newest.f0, cutoff: newest.cutoff, amps: amps, voices: count, note: newest.note }, [amps.buffer]);
+        this.port.postMessage({ type: 'spectrum', f0: newest.f0, cutoff: newest.cutoff, stretch: newest.stretch, lfo: this.lfo,
+                                amps: amps, voices: active, note: newest.note }, [amps.buffer]);
       } else {
         this.port.postMessage({ type: 'spectrum', amps: null, voices: 0 });
       }
@@ -560,6 +722,10 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     fA:5, fD:400, fS:30, fR:400,
     aA:5, aD:600, aS:80, aR:300,
     uniVoices:1, uniDetune:15, uniSpread:50,
+    prism:0, prismEnv:0,
+    phDepth:0, phNotches:2, phOffset:0, phSpeed:0,
+    harmVoices:0, harmInterval:7, harmLevel:70,
+    blurTime:0, blurHarm:0,
     volume:70, reverb:20
   };
   var KNOBS = {
@@ -581,6 +747,17 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     uniVoices:{ label:'Voices',   min:1,    max:8,     unit:'', step:1 },
     uniDetune:{ label:'Detune',   min:0,    max:100,   unit:'¢' },
     uniSpread:{ label:'Spread',   min:0,    max:100,   unit:'%' },
+    prism:    { label:'Amount',   min:-100, max:100,   unit:'±' },
+    prismEnv: { label:'Env',      min:-100, max:100,   unit:'±' },
+    phDepth:  { label:'Depth',    min:0,    max:100,   unit:'%' },
+    phNotches:{ label:'Notches',  min:0.25, max:8,     unit:'/oct', log:true },
+    phOffset: { label:'Offset',   min:0,    max:100,   unit:'%' },
+    phSpeed:  { label:'Speed',    min:0,    max:4,     unit:'hz', curve:2 },
+    harmVoices:{ label:'Voices',  min:0,    max:2,     unit:'', step:1 },
+    harmInterval:{ label:'Interval', min:-12, max:12,  unit:'st', step:1 },
+    harmLevel:{ label:'Level',    min:0,    max:100,   unit:'%' },
+    blurTime: { label:'Time',     min:0,    max:3000,  unit:'ms', curve:2 },
+    blurHarm: { label:'Harm',     min:0,    max:100,   unit:'%' },
     volume:   { label:'Volume',   min:0,    max:100,   unit:'%' },
     reverb:   { label:'Reverb',   min:0,    max:100,   unit:'%' }
   };
@@ -590,7 +767,11 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     'out-knobs':    ['volume', 'reverb'],
     'fenv-knobs':   ['fA', 'fD', 'fS', 'fR'],
     'aenv-knobs':   ['aA', 'aD', 'aS', 'aR'],
-    'uni-knobs':    ['uniVoices', 'uniDetune', 'uniSpread']
+    'uni-knobs':    ['uniVoices', 'uniDetune', 'uniSpread'],
+    'prism-knobs':  ['prism', 'prismEnv'],
+    'phaser-knobs': ['phDepth', 'phNotches', 'phOffset', 'phSpeed'],
+    'harm-knobs':   ['harmVoices', 'harmInterval', 'harmLevel'],
+    'blur-knobs':   ['blurTime', 'blurHarm']
   };
 
   function preset(name, over){ var p = Object.assign({}, DEFAULTS, over); return { name: name, params: p }; }
@@ -607,7 +788,16 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
                                 aA:20, aD:800, aS:80, aR:600, uniVoices:2, uniDetune:6, reverb:30 }),
     preset('Sub Bass',        { waveA:'sin', waveB:'tri', morph:35, cutoff:800, res:0, envAmt:15, keytrack:0, aA:2, aD:300, aS:90, aR:120, reverb:0 }),
     preset('Bell Partials',   { waveA:'organ', waveB:'pulse', morph:40, oddEven:30, pluck:35, cutoff:6000, res:15, envAmt:0,
-                                aA:2, aD:2500, aS:0, aR:2000, uniVoices:3, uniDetune:5, reverb:40 })
+                                aA:2, aD:2500, aS:0, aR:2000, uniVoices:3, uniDetune:5, reverb:40 }),
+    preset('Prism Bells',     { waveA:'saw', prism:45, pluck:20, cutoff:9000, res:10, envAmt:0, aA:2, aD:3000, aS:0, aR:2500, reverb:45 }),
+    preset('Metal Sweep',     { waveA:'sqr', prism:30, prismEnv:40, cutoff:6000, envAmt:20, fA:5, fD:1500, fS:0, fR:800,
+                                aD:2000, aS:40, aR:900, reverb:30 }),
+    preset('Phaser Pad',      { waveA:'saw', waveB:'organ', morph:30, phDepth:80, phNotches:1.5, phSpeed:0.15, cutoff:6000, envAmt:10,
+                                aA:500, aD:1500, aS:80, aR:1500, uniVoices:3, uniDetune:10, uniSpread:70, reverb:45 }),
+    preset('Fifth Lead',      { waveA:'saw', harmVoices:1, harmInterval:7, harmLevel:70, cutoff:3500, res:35, envAmt:30,
+                                uniVoices:2, uniDetune:6, aR:250, reverb:20 }),
+    preset('Blur Swell',      { waveA:'saw', waveB:'sqr', morph:50, blurTime:1500, blurHarm:40, cutoff:5000, envAmt:25, fA:600, fD:2000, fS:50,
+                                aA:50, aS:90, aR:1500, reverb:50 })
   ];
 
   var STATE_KEY = 'loam-elf-charmor/state/v1', USER_KEY = 'loam-elf-charmor/presets/v1';
@@ -716,12 +906,19 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   function fmt(def, v){
     if (def.unit === 'Hz') return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : Math.round(v) + 'Hz';
     if (def.unit === '±') return (v > 0.5 ? '+' : '') + Math.round(v);
+    if (def.unit === 'st') return (v > 0.5 ? '+' : '') + Math.round(v) + 'st';
+    if (def.unit === 'hz') return v.toFixed(v < 1 ? 2 : 1) + 'Hz';
+    if (def.unit === '/oct') return v.toFixed(v < 2 ? 2 : 1);
     return Math.round(v) + def.unit;
   }
-  function toT(def, v){ return def.log ? Math.log(v / def.min) / Math.log(def.max / def.min) : (v - def.min) / (def.max - def.min); }
+  function toT(def, v){
+    if (def.log) return Math.log(v / def.min) / Math.log(def.max / def.min);
+    var t = (v - def.min) / (def.max - def.min);
+    return def.curve ? Math.pow(Math.max(0, t), 1 / def.curve) : t;   // curve: finer at the low end
+  }
   function fromT(def, t){
     t = Math.min(1, Math.max(0, t));
-    var v = def.log ? def.min * Math.pow(def.max / def.min, t) : def.min + t * (def.max - def.min);
+    var v = def.log ? def.min * Math.pow(def.max / def.min, t) : def.min + (def.curve ? Math.pow(t, def.curve) : t) * (def.max - def.min);
     return def.step ? Math.round(v / def.step) * def.step : v;
   }
   var knobRenders = {};
@@ -867,7 +1064,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     var db = 20 * Math.log10(Math.max(1e-9, a));
     return canvas.height * (1 - Math.max(0, (db + DB_RANGE) / (DB_RANGE + 12)));
   }
-  function drawScreen(f0, cutoff, amps, label){
+  function drawScreen(f0, cutoff, amps, label, stretch, lfo){
     var W = canvas.width, H = canvas.height, dpr = window.devicePixelRatio || 1;
     g.clearRect(0, 0, W, H);
     // octave grid
@@ -882,35 +1079,37 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
       for (k = 1; k < amps.length; k++) {
         var a = Math.abs(amps[k]) * scale;
         if (a < 1e-5) continue;
-        var x = xOf(k * f0), y = yOf(a);
+        var x = xOf(f0 * partialRatio(k, stretch)), y = yOf(a);
         g.fillRect(x - barW / 2, y, barW, H - y);
       }
       g.shadowBlur = 0;
     }
-    // filter curve
+    // the shaping curve: the filter, with the phaser's notches
     g.strokeStyle = 'rgba(126,196,190,.9)'; g.lineWidth = 1.5 * dpr; g.beginPath();
     for (var px = 0; px <= W; px += 2) {
       var fx = FMIN * Math.pow(FMAX / FMIN, px / W);
-      var fy = yOf(filterGain(params.ftype, fx, cutoff, params.res) / 4);
+      var fy = yOf(filterGain(params.ftype, fx, cutoff, params.res) * phaserGain(params, fx, lfo) / 4);
       if (px === 0) g.moveTo(px, fy); else g.lineTo(px, fy);
     }
     g.stroke();
     document.getElementById('spectrum-info').textContent = label;
   }
   // Idle: what C4 would sound like right now, at the top of its envelopes.
-  var liveUntil = 0;
+  var liveUntil = 0, previewAmps = new Float64Array(MAX_PARTIALS + 1), previewScratch = new Float64Array(MAX_PARTIALS + 1);
   function drawPreview(){
     if (performance.now() < liveUntil) return;
-    var f0 = 261.63, fc = effectiveCutoff(params, f0, params.fS / 100), amps = new Float32Array(MAX_PARTIALS + 1);
-    for (var k = 1; k <= MAX_PARTIALS && k * f0 < 20000; k++) amps[k] = timbreAt(timbres, params, k) * filterGain(params.ftype, k * f0, fc, params.res);
-    drawScreen(f0, fc, amps, 'PREVIEW · C4');
+    var f0 = 261.63, fc = effectiveCutoff(params, f0, params.fS / 100), s = prismStretch(params, params.fS / 100);
+    var K = 1;
+    while (K < MAX_PARTIALS && f0 * partialRatio(K + 1, s) < 20000) K++;
+    voiceAmps(timbres, params, f0, K, fc, s, 0, 0, previewAmps, previewScratch);
+    drawScreen(f0, fc, previewAmps.subarray(0, K + 1), 'PREVIEW · C4', s, 0);
   }
   function onEngineMessage(m){
     if (m.type !== 'spectrum') return;
     document.getElementById('voices-readout').textContent = m.voices;
     if (m.amps) {
       liveUntil = performance.now() + 400;
-      drawScreen(m.f0, m.cutoff, m.amps, 'LIVE · ' + noteName(m.note) + ' · ' + (m.amps.length - 1) + ' HARMONICS');
+      drawScreen(m.f0, m.cutoff, m.amps, 'LIVE · ' + noteName(m.note) + ' · ' + (m.amps.length - 1) + (m.stretch ? ' PARTIALS' : ' HARMONICS'), m.stretch, m.lfo);
     } else if (performance.now() >= liveUntil - 300) {
       liveUntil = 0; drawPreview();
     }

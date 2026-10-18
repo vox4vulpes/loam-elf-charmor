@@ -15,7 +15,8 @@ Open `index.html` in any modern browser to play it.
 Each voice works out the level of every harmonic — from the timbre, the
 spectral filter and PLUCK — and every few milliseconds turns them into one
 cycle of its waveform (an inverse FFT), which the voice and its unison copies
-play at their own pitch. The screen shows the harmonics of the newest note and
+play at their own pitch. With PRISM on, the harmonics no longer fit one cycle,
+so the voice plays them as a bank of sine partials instead. The screen shows the harmonics of the newest note and
 the filter curve shaping them; with nothing playing, it previews C4.
 
 ## Controls
@@ -29,6 +30,15 @@ the filter curve shaping them; with nothing playing, it previews C4.
   envelope moves it, ±6 octaves) and **KEY** (key tracking)
 - **Filter Env** and **Amp Env** — attack, decay, sustain, release
 - **Unison** — up to 8 copies of each note: **VOICES**, **DETUNE**, **SPREAD**
+- **Prism** — pushes the harmonics off the harmonic series: harmonic *k*
+  moves to *k*^(1 + s), stretched upward (bells, metal) or squeezed. **ENV**
+  lets the filter envelope move it
+- **Phaser** — notches across the spectrum, **NOTCHES** per octave, at
+  **DEPTH**, slid along by **OFFSET** and, at **SPEED**, by their own LFO
+- **Harmonizer** — up to two extra copies of every note, **INTERVAL** apart
+  (±12 semitones), at **LEVEL**: fifths, octaves, chords from one key
+- **Blur** — **TIME** smears the harmonics in time (notes swell in, timbre
+  changes melt), **HARM** smears them into their neighbours
 - **Output** — volume and reverb
 - **Presets** — factory sounds, and your own (kept in this browser)
 
@@ -44,8 +54,7 @@ And the little egret next to the name has something to say.
 
 ## Coming next
 
-Prism (harmonics pushed off the harmonic series: bells, metal), phaser and
-harmonizer, blur, and the VST3 plugin.
+The VST3 plugin.
 
 ## Releases
 
