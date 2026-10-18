@@ -176,7 +176,7 @@
   .presets-row{display:flex;}
   .page-tabs{display:flex; gap:6px; --accent:var(--coral);}
   .page-tab{min-width:70px; letter-spacing:.12em;}
-  .chip-row .toggle-btn{--accent:var(--lavender); flex:none; padding:5px 10px;}
+  .chip-row .chip-btn.toggle-btn{--accent:var(--lavender); flex:none; padding:5px 10px;}
   .matrix{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px 18px;}
   .mod-slot{display:flex; align-items:center; gap:6px; min-width:0;}
   .mod-slot select{
@@ -229,6 +229,8 @@
     background:var(--accent); transform-origin:50% 100%;
     transform:translateX(-50%) rotate(var(--angle,-135deg)); box-shadow:0 0 4px var(--accent);
   }
+  /* LFO and envelope graphs: a small dark screen above the knobs. */
+  .mod-graph{width:100%; height:64px; display:block; border-radius:6px; background:var(--readout-bg); box-shadow:inset 0 1px 3px rgba(0,0,0,.6);}
   /* CUST mod wheel, as on Loam Eight Sub: a button per knob assigns it; red and
      green dots on the ring set where the wheel takes it, red at the bottom. */
   .knob{position:relative;}
@@ -608,6 +610,15 @@ function pluckGain(p, k, t){
   return p.pluck > 0 ? Math.exp(-p.pluck / 100 * 3 * (k - 1) * t) : 1;
 }
 
+// LFO shapes, one cycle over ph 0..1; RND holds a random value per cycle.
+function lfoShape(shape, ph, held){
+  if (shape === 'tri') return ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph;
+  if (shape === 'saw') return 2 * ph - 1;
+  if (shape === 'sqr') return ph < 0.5 ? 1 : -1;
+  if (shape === 'rnd') return held;
+  return Math.sin(2 * Math.PI * ph);
+}
+
 // PRISM: harmonic k moves to k^(1 + s). s > 0 stretches the series upward
 // (bells, metal), s < 0 squeezes it; ENV lets the filter envelope push it.
 function prismStretch(p, fenv){
@@ -724,6 +735,7 @@ function Voice(){
   // the parameters after the mod matrix, and this voice's copies.
   this.env2 = 0; this.e2Stage = 0; this.env3 = 0; this.e3Stage = 0;
   this.lfoPh = new Float64Array(2); this.lfoHeld = new Float64Array(2);
+  this.lfoView = new Float64Array(2);   // the phase each LFO was read at, for the MOD page's graphs
   this.pv = {}; this.pitch = 0; this.volume = 1; this.pan = 0; this.imgPos = 0;
   this.cRatio = new Float64Array(MAX_COPIES); this.cL = new Float64Array(MAX_COPIES); this.cR = new Float64Array(MAX_COPIES);
 }
@@ -745,13 +757,6 @@ var MOD_TARGETS = {
   pan:      { range: 1 }
 };
 
-function lfoShape(shape, ph, held){
-  if (shape === 'tri') return ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph;
-  if (shape === 'saw') return 2 * ph - 1;
-  if (shape === 'sqr') return ph < 0.5 ? 1 : -1;
-  if (shape === 'rnd') return held;
-  return Math.sin(2 * Math.PI * ph);
-}
 
 // Linear attack, then exponential moves; each time is how long to get ~99% there.
 function stepEnv(level, stage, a, d, s, r, dt){
@@ -842,6 +847,7 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
       } else { ph = this.gLfoPh[l]; held = this.gHeld[l]; }
       var fade = p[pre + 'Delay'] > 0 ? Math.min(1, v.t / (p[pre + 'Delay'] / 1000)) : 1;
       src[l === 0 ? 'lfo1' : 'lfo2'] = lfoShape(p[pre + 'Shape'], ph, held) * fade;
+      v.lfoView[l] = ph;
     }
     var pv = Object.assign(v.pv, p), cutOct = 0;
     v.pitch = 0; v.volume = 1; v.pan = 0;
@@ -1034,7 +1040,11 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
         var amps = new Float32Array(newest.count + 1);
         for (var k = 1; k <= newest.count; k++) amps[k] = newest.amps[k] * newest.level;
         this.port.postMessage({ type: 'spectrum', f0: newest.f0, cutoff: newest.cutoff, stretch: newest.stretch, lfo: this.lfo, imgPos: newest.imgPos,
-                                amps: amps, voices: active, note: newest.note }, [amps.buffer]);
+                                amps: amps, voices: active, note: newest.note,
+                                // where the newest note is on the LFO and envelope graphs
+                                mod: { t: newest.t, lfo: [newest.lfoView[0], newest.lfoView[1]],
+                                       env: { a: [newest.amp, newest.ampStage], f: [newest.fenv, newest.fStage],
+                                              e2: [newest.env2, newest.e2Stage], e3: [newest.env3, newest.e3Stage] } } }, [amps.buffer]);
       } else {
         this.port.postMessage({ type: 'spectrum', amps: null, voices: 0 });
       }
@@ -1573,6 +1583,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     tabs.forEach(function(t){ var on = t.dataset.page === name; t.classList.toggle('is-active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
     document.querySelectorAll('.modules[data-page]').forEach(function(m){ m.hidden = m.dataset.page !== name; });
     try { localStorage.setItem('loam-elf-charmor/page', name); } catch (err) {}
+    drawGraphs();
   }
   tabs.forEach(function(t){ t.addEventListener('click', function(){ showPage(t.dataset.page); }); });
   try { var savedPage = localStorage.getItem('loam-elf-charmor/page'); if (savedPage && document.querySelector('.page-tab[data-page="' + savedPage + '"]')) showPage(savedPage); } catch (err) {}
@@ -1593,7 +1604,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   function changed(){
     sendParams(); applyOutput(); save();
     if (presetName && presetName.slice(-9) !== ' (edited)') { presetName += ' (edited)'; renderPresetSelect(); }
-    drawPreview();
+    drawPreview(); drawGraphs();
   }
 
   // ---------- presets ----------
@@ -1716,10 +1727,12 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     if (m.amps) {
       liveUntil = performance.now() + 400;
       lastFrame = m;
+      liveMod = m.mod || null; drawGraphs();
       if (imgBytes && m.imgPos !== undefined) drawImageBay(m.imgPos);
       drawScreen(m.f0, m.cutoff, m.amps, 'LIVE · ' + noteName(m.note) + ' · ' + (m.amps.length - 1) + (m.stretch ? ' PARTIALS' : ' HARMONICS'), m.stretch, m.lfo);
     } else if (performance.now() >= liveUntil - 300) {
       liveUntil = 0; drawPreview();
+      if (liveMod) { liveMod = null; drawGraphs(); }
     }
   }
   fitCanvas(); drawPreview();
@@ -1965,6 +1978,112 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     if (/^audio\//.test(file.type)) loadSoundFile(file); else loadImageFile(file);
   });
   loadImageFromParams(); drawPreview();
+
+  // ---------- LFO and envelope graphs ----------
+  // Each LFO and envelope module gets a little screen with its shape, and a dot
+  // where the newest note is on it right now.
+  var graphs = [], liveMod = null;
+  function addGraph(boxId, kind, pre, color){
+    var box = document.getElementById(boxId), c = document.createElement('canvas');
+    c.className = 'mod-graph'; c.setAttribute('aria-hidden', 'true');
+    box.parentNode.insertBefore(c, box);
+    graphs.push({ canvas: c, kind: kind, pre: pre, color: color });
+  }
+  addGraph('fenv-knobs', 'env', 'f', '#7ec4be');
+  addGraph('aenv-knobs', 'env', 'a', '#e08a74');
+  addGraph('l1-knobs', 'lfo', 'l1', '#b7a6d4');
+  addGraph('l2-knobs', 'lfo', 'l2', '#b7a6d4');
+  addGraph('e2-knobs', 'env', 'e2', '#e08a74');
+  addGraph('e3-knobs', 'env', 'e3', '#e08a74');
+
+  function graphLabel(g2, text, x, y, align){
+    g2.fillStyle = 'rgba(240,168,48,.55)'; g2.font = (9 * (window.devicePixelRatio || 1)) + 'px "IBM Plex Mono", monospace';
+    g2.textAlign = align; g2.fillText(text, x, y);
+  }
+  function rndHeld(n){ var x = Math.sin((n + 1) * 78.233) * 43758.5453; return (x - Math.floor(x)) * 2 - 1; }   // RND, repeatable for drawing
+  function lfoAt(pre, t){
+    var rate = params[pre + 'Rate'], delay = params[pre + 'Delay'] / 1000;
+    var fade = delay > 0 ? Math.min(1, t / delay) : 1, cyc = t * rate;
+    return lfoShape(params[pre + 'Shape'], cyc - Math.floor(cyc), rndHeld(Math.floor(cyc))) * fade;
+  }
+  function drawLfo(gr, g2, W, H, dpr){
+    var pre = gr.pre, rate = params[pre + 'Rate'], delay = params[pre + 'Delay'] / 1000;
+    var T = Math.min(20, Math.max(2 / rate, delay + 1.5 / rate)), mid = H / 2, amp = H / 2 - 6 * dpr;
+    g2.strokeStyle = 'rgba(240,168,48,.12)'; g2.lineWidth = 1;
+    g2.beginPath(); g2.moveTo(0, mid); g2.lineTo(W, mid); g2.stroke();
+    if (delay > 0) {   // the fade-in: the wave grows inside these lines
+      var fx = Math.min(W, delay / T * W);
+      g2.setLineDash([3 * dpr, 3 * dpr]); g2.strokeStyle = 'rgba(183,166,212,.45)';
+      g2.beginPath(); g2.moveTo(0, mid); g2.lineTo(fx, mid - amp); g2.lineTo(W, mid - amp);
+      g2.moveTo(0, mid); g2.lineTo(fx, mid + amp); g2.lineTo(W, mid + amp); g2.stroke(); g2.setLineDash([]);
+    }
+    g2.strokeStyle = gr.color; g2.lineWidth = 1.6 * dpr; g2.beginPath();
+    for (var px = 0; px <= W; px++) {
+      var y = mid - lfoAt(pre, px / W * T) * amp;
+      if (px === 0) g2.moveTo(px, y); else g2.lineTo(px, y);
+    }
+    g2.stroke();
+    graphLabel(g2, rate.toFixed(rate < 1 ? 2 : 1) + ' Hz' + (params[pre + 'Retrig'] ? ' \u00b7 RETRIG' : ''), 4 * dpr, H - 4 * dpr, 'left');
+    graphLabel(g2, T.toFixed(T < 10 ? 1 : 0) + ' s', W - 4 * dpr, H - 4 * dpr, 'right');
+    if (liveMod) {
+      var ph = liveMod.lfo[pre === 'l1' ? 0 : 1];
+      // a retriggered LFO is at the note's time; a free one at its phase in the first cycle
+      var t = params[pre + 'Retrig'] ? liveMod.t % T : ph / rate;
+      dot(g2, t / T * W, mid - lfoAt(pre, params[pre + 'Retrig'] ? liveMod.t : t) * amp, gr.color, dpr);
+    }
+  }
+  // Envelope: each stage gets a width by the square root of its time, so a 2 ms
+  // attack and a 6 s release both stay visible; sustain gets a fixed stretch.
+  function drawEnv(gr, g2, W, H, dpr){
+    var pre = gr.pre, A = params[pre + 'A'], D = params[pre + 'D'], S = params[pre + 'S'] / 100, R = params[pre + 'R'];
+    var wa = Math.sqrt(A), wd = Math.sqrt(D), ws = Math.sqrt(600), wr = Math.sqrt(R), k = W / (wa + wd + ws + wr);
+    wa *= k; wd *= k; ws *= k; wr *= k;
+    var top = 8 * dpr, bottom = H - 14 * dpr;
+    function y(l){ return bottom - l * (bottom - top); }
+    function level(x){
+      if (x <= wa) return x / wa;
+      x -= wa; if (x <= wd) return S + (1 - S) * Math.exp(-4.6 * x / wd);
+      x -= wd; if (x <= ws) return S;
+      x -= ws; return S * Math.exp(-4.6 * x / wr);
+    }
+    g2.beginPath(); g2.moveTo(0, bottom);
+    for (var px = 0; px <= W; px++) g2.lineTo(px, y(level(px)));
+    g2.lineTo(W, bottom); g2.closePath();
+    g2.globalAlpha = 0.18; g2.fillStyle = gr.color; g2.fill(); g2.globalAlpha = 1;
+    g2.strokeStyle = gr.color; g2.lineWidth = 1.6 * dpr; g2.beginPath();
+    for (px = 0; px <= W; px++) { if (px === 0) g2.moveTo(px, y(level(px))); else g2.lineTo(px, y(level(px))); }
+    g2.stroke();
+    g2.strokeStyle = 'rgba(240,168,48,.12)'; g2.lineWidth = 1;
+    [wa, wa + wd, wa + wd + ws].forEach(function(x){ g2.beginPath(); g2.moveTo(x + 0.5, top); g2.lineTo(x + 0.5, bottom); g2.stroke(); });
+    graphLabel(g2, 'A', wa / 2, H - 3 * dpr, 'center'); graphLabel(g2, 'D', wa + wd / 2, H - 3 * dpr, 'center');
+    graphLabel(g2, 'S', wa + wd + ws / 2, H - 3 * dpr, 'center'); graphLabel(g2, 'R', wa + wd + ws + wr / 2, H - 3 * dpr, 'center');
+    if (liveMod && liveMod.env[pre]) {
+      var lv = liveMod.env[pre][0], stage = liveMod.env[pre][1], x;
+      if (stage === 0) x = lv * wa;
+      else if (stage === 1) x = lv - S > 1e-3 ? wa + Math.min(1, -Math.log((lv - S) / Math.max(1e-6, 1 - S)) / 4.6) * wd : wa + wd + ws / 2;
+      else x = wa + wd + ws + Math.min(1, -Math.log(Math.max(1e-6, lv) / Math.max(1e-3, S)) / 4.6) * wr;
+      dot(g2, Math.max(0, Math.min(W, x)), y(lv), gr.color, dpr);
+    }
+  }
+  function dot(g2, x, yy, color, dpr){
+    g2.fillStyle = '#fbf8ef'; g2.beginPath(); g2.arc(x, yy, 3.5 * dpr, 0, 2 * Math.PI); g2.fill();
+    g2.strokeStyle = color; g2.lineWidth = 1.5 * dpr; g2.stroke();
+  }
+  function drawGraphs(){
+    if (!graphs) return;   // a saved page can be shown before the graphs exist
+    var dpr = window.devicePixelRatio || 1;
+    graphs.forEach(function(gr){
+      var c = gr.canvas;
+      if (!c.offsetParent) return;   // its page isn't showing
+      var w = Math.round(c.clientWidth * dpr), hh = Math.round(c.clientHeight * dpr);
+      if (c.width !== w || c.height !== hh) { c.width = w; c.height = hh; }
+      var g2 = c.getContext('2d');
+      g2.clearRect(0, 0, w, hh);
+      if (gr.kind === 'lfo') drawLfo(gr, g2, w, hh, dpr); else drawEnv(gr, g2, w, hh, dpr);
+    });
+  }
+  window.addEventListener('resize', drawGraphs);
+  drawGraphs();
 
   // ---------- pitch and mod wheels (as on Loam Eight Sub) ----------
   var pitchWheelEl = document.getElementById('pitch-wheel'), modWheelEl = document.getElementById('mod-wheel');

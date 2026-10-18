@@ -40,7 +40,9 @@ the filter curve shaping them; with nothing playing, it previews C4.
 - **Blur** — **TIME** smears the harmonics in time (notes swell in, timbre
   changes melt), **HARM** smears them into their neighbours
 - **Mod** page — **LFO 1** and **LFO 2** (SIN, TRI, SAW, SQR, RND; rate, fade-in,
-  RETRIG per note), **ENV 2** and **ENV 3**, and a six-slot **mod matrix**:
+  RETRIG per note), **ENV 2** and **ENV 3**, each drawn on its own little
+  screen (the filter and amp envelopes too) with a dot showing where the
+  newest note is on it, and a six-slot **mod matrix**:
   any of them, velocity or the mod wheel onto pitch, cutoff, resonance, morph,
   odd/even, prism, phaser offset, blur, pluck, detune, volume or pan
 - **Wheels** — as on Loam Eight Sub: the pitch wheel's range is set with + / −

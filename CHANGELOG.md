@@ -15,7 +15,9 @@ release workflow refuses to publish a version that has no section here.
   harmonic series, also by the filter envelope), **Phaser** (moving notches
   across the spectrum), **Harmonizer** (up to two extra copies of each note an
   interval apart) and **Blur** (harmonics smeared in time and into each other).
-- **Mod page**: two LFOs, two more envelopes and a six-slot mod matrix
+- **Mod page**: two LFOs, two more envelopes and a six-slot mod matrix.
+  Every LFO and envelope (filter and amp included) has a graph of its shape,
+  with fade-in and segment marks and a dot following the newest note
   (envelopes, LFOs, velocity, mod wheel → pitch, cutoff, resonance, morph,
   odd/even, prism, phaser offset, blur, pluck, detune, volume, pan).
 - **Image page**: play a picture as harmonics over time, or resynthesise a
