@@ -354,13 +354,14 @@ void CharmorKnob::startTyping()
     typing->grabKeyboardFocus();
     typing->selectAll();
 
-    auto finish = [this] (bool apply)
+    // The safe pointer is made out here: MSVC can't take `this` inside a nested lambda's capture.
+    auto finish = [this, safe = juce::Component::SafePointer<CharmorKnob> (this)] (bool apply)
     {
         if (typing == nullptr || typing->getProperties().contains ("done"))
             return;
         typing->getProperties().set ("done", true);   // Escape, then the focus going: only the first counts
         auto text = typing->getText().trim().toLowerCase().replaceCharacter (',', '.');
-        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<CharmorKnob> (this)] { if (safe != nullptr) safe->typing.reset(); });
+        juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->typing.reset(); });
         if (! apply)
             return;
         const auto number = text.initialSectionContainingOnly ("+-.0123456789");

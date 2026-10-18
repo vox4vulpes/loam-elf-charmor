@@ -1,7 +1,7 @@
 # Loam Elf-cHarmor
 
 **[Play it in your browser](https://vox4vulpes.github.io/loam-elf-charmor/)** ·
-VST3 plugin coming next ·
+**[Download the VST3 plugin and standalone app](https://github.com/vox4vulpes/loam-elf-charmor/releases/latest)** ·
 part of the [Loam Synth Bundle](https://github.com/vox4vulpes/loam-synth-vst)
 
 小鷺 · Additive Synthesizer: every sound is a sum of up to 256 sine-wave
@@ -78,9 +78,30 @@ which move the on-screen ones.
 
 And the little egret next to the name has something to say.
 
-## Coming next
+## VST3 plugin
 
-The VST3 plugin.
+[`vst/`](vst/) is the same synth as a VST3 plugin and standalone app, built with
+JUCE: the engine is the web version's AudioWorklet ported line for line (same
+128-sample blocks, tables, envelopes and LFOs; its levels match the browser's),
+with the same four pages, presets, CUST wheel and image loading.
+
+- Every knob, choice and switch is an automatable parameter; CUST assignments
+  and the IMAGE picture are saved with the project and in user presets, which
+  are files under your user app-data folder in `Loam/Loam Elf-cHarmor/Presets`.
+- Pictures (PNG, JPEG, GIF) and sounds (WAV, AIFF, FLAC, Ogg, MP3) load from the
+  IMAGE page's buttons or by dropping them on its screen.
+- The window can be resized; the panel scales with it.
+
+To build it yourself (C++17; on Linux a few dev packages, see
+[`.github/workflows/build-vst.yml`](.github/workflows/build-vst.yml)):
+
+```sh
+cmake -S vst -B vst/build -DCMAKE_BUILD_TYPE=Release
+cmake --build vst/build --config Release
+```
+
+`vst/Tests/EngineTest.cpp` checks the engine against the web version (pitch,
+harmonics, levels) without any GUI dependencies (`-DLOAM_BUILD_PLUGIN=OFF`).
 
 ## Releases
 
