@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
 
@@ -19,7 +20,10 @@ public:
     };
 
     void prepare (double sampleRate, int maximumBlockSize);
-    void setSettings (const Settings&);
+    void setSettings (const Settings&);   // audio thread; doesn't touch the reverb room
+    // The reverb's room is rebuilt off the audio thread when SIZE changes.
+    bool reverbNeedsSize (double seconds) const { return builtSize.load() != seconds; }
+    void buildReverb (double seconds);
     void process (float* left, float* right, int numSamples);
     bool isReverbReady() const { return reverb.getCurrentIRSize() > 0; }
 
@@ -37,7 +41,6 @@ private:
         float process (float x);
     };
 
-    void buildReverb (double seconds);
     void setUnit (Smooth& dry, Smooth& wet, bool on, double dryOn, double wetOn);
 
     double sr = 44100.0;
@@ -64,7 +67,7 @@ private:
     // REVERB
     juce::dsp::Convolution reverb;
     juce::AudioBuffer<float> revBuf;
-    double builtSize = -1;
+    std::atomic<double> builtSize { -1.0 };
     Smooth revDry, revWet;
 
     // COMP

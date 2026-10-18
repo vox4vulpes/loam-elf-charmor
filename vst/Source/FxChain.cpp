@@ -40,9 +40,9 @@ void FxChain::prepare (double sampleRate, int maximumBlockSize)
     dlyBuf.clear();
     revBuf.setSize (2, juce::jmax (1, maximumBlockSize));
     reverb.prepare ({ sr, (juce::uint32) juce::jmax (1, maximumBlockSize), 2 });
-    builtSize = -1;
     first = true;
     setSettings (s);
+    buildReverb (s.revSize);
 }
 
 void FxChain::buildReverb (double seconds)
@@ -95,8 +95,6 @@ void FxChain::setSettings (const Settings& settings)
     for (auto& f : dlyTone) f.set (6000, sr);
     setUnit (dlyDry, dlyWet, s.dly, 1, s.dlyMix / 100);
 
-    if (builtSize != s.revSize)
-        buildReverb (s.revSize);
     setUnit (revDry, revWet, s.rev, 1, s.reverb / 100 * 0.6);
 
     setUnit (compDry, compWet, s.comp, 0, 1);
