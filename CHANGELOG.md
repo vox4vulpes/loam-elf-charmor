@@ -18,13 +18,17 @@ release workflow refuses to publish a version that has no section here.
 - **Mod page**: two LFOs, two more envelopes and a six-slot mod matrix
   (envelopes, LFOs, velocity, mod wheel → pitch, cutoff, resonance, morph,
   odd/even, prism, phaser offset, blur, pluck, detune, volume, pan).
+- **Image page**: play a picture as harmonics over time, or resynthesise a
+  sound (its pitch found, each frame analysed into harmonics) to play at any
+  note; amount, time and loop; drop files on the screen. A new factory preset,
+  Spectral Arp, plays the overtone series as a staircase picture.
 - **FX page**: distortion, chorus, delay, reverb and compressor in a chain,
   each with its own on/off switch; the reverb moved here from Output.
 - **Pitch and mod wheels** as on Loam Eight Sub: bend range ± on the pitch
   wheel, VIB / FILT / MTRX on the mod wheel, kept with presets.
 - A spectrum screen showing the harmonics of the newest note and the filter
   curve, or a preview of C4 while nothing plays.
-- Seventeen factory presets and your own, saved in the browser.
+- Eighteen factory presets and your own, saved in the browser.
 - Computer-keyboard and MIDI play (notes, sustain pedal, pitch wheel).
 - A pixel-art elf girl as the browser-tab and app icon, and the little egret
   beside the name.

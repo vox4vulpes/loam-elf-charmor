@@ -133,8 +133,24 @@
         "matrix matrix matrix matrix matrix matrix";
     }
     .modules--fx{grid-template-areas:"fx fx fx fx fx fx";}
+    .modules--img{grid-template-areas:"img img img img img img";}
   }
   .modules[hidden]{display:none;}
+  .img-layout{display:flex; gap:14px; flex-wrap:wrap;}
+  .img-bay{position:relative; flex:1 1 380px; min-width:0; background:var(--groove-dark); border-radius:10px; padding:8px; box-shadow:inset 0 2px 6px var(--shadow);}
+  .img-bay.is-over{outline:2px dashed var(--teal); outline-offset:2px;}
+  #img-canvas{width:100%; height:180px; display:block; border-radius:6px; background:var(--readout-bg); image-rendering:pixelated;}
+  .img-drop{
+    position:absolute; inset:8px; display:flex; align-items:center; justify-content:center; pointer-events:none;
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.12em; color:rgba(240,168,48,.6); text-transform:uppercase;
+  }
+  .img-drop[hidden]{display:none;}
+  .img-side{flex:1 1 260px; display:flex; flex-direction:column; gap:10px; min-width:0;}
+  .img-side .chip-row .chip-btn{flex:none; padding:6px 10px;}
+  .img-status{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink); margin:0; min-height:1.3em;}
+  .img-controls{display:flex; align-items:center; gap:10px;}
+  .img-controls .toggle-btn{--accent:var(--teal); padding:5px 10px;}
+  .img-help{font-size:11px; color:var(--ink-soft); margin:0;}
   /* Effect units, as on Loam Eight Sub: name, slide switch, knobs; off dims them. */
   .fx-rack{display:flex; gap:10px; flex-wrap:wrap;}
   .fx-unit{
@@ -330,6 +346,7 @@
   <div class="page-tabs" role="tablist" aria-label="Panel pages">
     <button class="chip-btn page-tab is-active" type="button" role="tab" data-page="sound" aria-selected="true">SOUND</button>
     <button class="chip-btn page-tab" type="button" role="tab" data-page="mod" aria-selected="false">MOD</button>
+    <button class="chip-btn page-tab" type="button" role="tab" data-page="image" aria-selected="false">IMAGE</button>
     <button class="chip-btn page-tab" type="button" role="tab" data-page="fx" aria-selected="false">FX</button>
   </div>
 
@@ -413,6 +430,31 @@
     <section class="module" style="--accent:var(--sage); --area:matrix">
       <h2 class="module-title">Mod Matrix</h2>
       <div class="matrix" id="matrix"></div>
+    </section>
+  </div>
+
+  <div class="modules modules--img" data-page="image" hidden>
+    <section class="module" style="--accent:var(--teal); --area:img">
+      <h2 class="module-title">Image</h2>
+      <div class="img-layout">
+        <div class="img-bay" id="img-bay">
+          <canvas id="img-canvas" width="512" height="180" aria-label="The image: time left to right, harmonics bottom to top"></canvas>
+          <div class="img-drop" id="img-drop">Drop a picture or a sound here</div>
+        </div>
+        <div class="img-side">
+          <div class="chip-row">
+            <button class="chip-btn" type="button" id="img-load">LOAD IMAGE</button>
+            <button class="chip-btn" type="button" id="snd-load">LOAD SOUND</button>
+            <button class="chip-btn" type="button" id="img-clear">CLEAR</button>
+          </div>
+          <input type="file" id="img-file" accept="image/*" hidden>
+          <input type="file" id="snd-file" accept="audio/*" hidden>
+          <p class="img-status" id="img-status" aria-live="polite"></p>
+          <div class="img-controls"><div class="knob-row" id="img-knobs"></div>
+            <button class="chip-btn toggle-btn" type="button" id="img-loop" title="Start over at the end, or hold the last column">LOOP</button></div>
+          <p class="img-help">A picture plays left to right over TIME; each row from the bottom is one harmonic (1 to 256), and the brighter the pixel, the louder. A sound is analysed into the harmonics of its pitch and plays back at any note. AMOUNT mixes it with the timbre.</p>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -575,10 +617,18 @@ function blurHarmonics(a, K, amount, scratch){
   for (k = 1; k <= K; k++) a[k] = (a[k] < 0 ? -1 : 1) * scratch[k];
 }
 
-// Every harmonic's level for a voice: timbre, BLUR HARM, then the filter,
-// phaser and PLUCK at the harmonic's actual frequency (after PRISM).
-function voiceAmps(timbres, p, f0, K, fc, s, t, lfo, out, scratch){
-  for (var k = 1; k <= MAX_PARTIALS; k++) out[k] = k > K ? 0 : timbreAt(timbres, p, k);
+// IMAGE: a picture (or an analysed sound) as harmonic levels over time. Rows
+// are harmonics 1..256 from the bottom, columns are time; a pixel's brightness
+// spans 60 dB, black being silent.
+var IMAGE_ROWS = MAX_PARTIALS;
+function imageByteToAmp(b){ return b === 0 ? 0 : Math.pow(10, (b / 255 - 1) * 3); }
+
+// Every harmonic's level for a voice: timbre (mixed with the IMAGE column it's
+// on), BLUR HARM, then the filter, phaser and PLUCK at the harmonic's actual
+// frequency (after PRISM).
+function voiceAmps(timbres, p, f0, K, fc, s, t, lfo, out, scratch, img){
+  var im = img ? p.imgAmount / 100 : 0;
+  for (var k = 1; k <= MAX_PARTIALS; k++) out[k] = k > K ? 0 : timbreAt(timbres, p, k) * (1 - im) + (im ? img[k] * im : 0);
   blurHarmonics(out, K, p.blurHarm, scratch);
   for (k = 1; k <= K; k++) {
     var f = f0 * partialRatio(k, s);
@@ -651,7 +701,7 @@ function Voice(){
   // the parameters after the mod matrix, and this voice's copies.
   this.env2 = 0; this.e2Stage = 0; this.env3 = 0; this.e3Stage = 0;
   this.lfoPh = new Float64Array(2); this.lfoHeld = new Float64Array(2);
-  this.pv = {}; this.pitch = 0; this.volume = 1; this.pan = 0;
+  this.pv = {}; this.pitch = 0; this.volume = 1; this.pan = 0; this.imgPos = 0;
   this.cRatio = new Float64Array(MAX_COPIES); this.cL = new Float64Array(MAX_COPIES); this.cR = new Float64Array(MAX_COPIES);
 }
 
@@ -700,6 +750,7 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
     this.voices = [];
     for (var i = 0; i < NUM_VOICES; i++) this.voices.push(new Voice());
     this.p = null; this.bend = 0; this.sustain = false; this.counter = 0; this.blocks = 0; this.lfo = 0;
+    this.img = null; this.imgCol = new Float64Array(MAX_PARTIALS + 1); this.imgPos = 0;
     this.wheel = 0; this.gLfoPh = new Float64Array(2); this.gHeld = new Float64Array(2); this.vibPh = 0;
     this.buf = new Float64Array(BLOCK);
     this.port.onmessage = (e) => this.onMessage(e.data);
@@ -715,6 +766,12 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
     else if (m.type === 'off') this.noteOff(m.note);
     else if (m.type === 'bend') this.bend = m.value;   // pitch wheel, -1..1; BEND RANGE scales it
     else if (m.type === 'wheel') this.wheel = m.value;
+    else if (m.type === 'image') {
+      if (!m.bytes) { this.img = null; return; }
+      var amps = new Float32Array(m.bytes.length);
+      for (var j = 0; j < amps.length; j++) amps[j] = imageByteToAmp(m.bytes[j]);
+      this.img = { cols: m.cols, amps: amps };
+    }
     else if (m.type === 'sustain') {
       this.sustain = m.on;
       if (!m.on) this.voices.forEach((v) => { if (v.sustained) { v.sustained = false; this.release(v); } });
@@ -811,9 +868,23 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
   }
 
   // New harmonic levels: the voice's recipe, eased toward by BLUR TIME.
+  // The voice's place in the IMAGE: SPEED seconds from first column to last, then loop or hold.
+  imageColumn(v, p){
+    var img = this.img, cols = img.cols, pos = v.t / Math.max(0.05, p.imgSpeed) * cols;
+    pos = p.imgLoop ? pos % cols : Math.min(cols - 1, pos);
+    var c0 = Math.floor(pos), c1 = p.imgLoop ? (c0 + 1) % cols : Math.min(cols - 1, c0 + 1), fr = pos - c0;
+    for (var k = 1; k <= MAX_PARTIALS; k++) {
+      var r = k - 1;
+      this.imgCol[k] = img.amps[r * cols + c0] * (1 - fr) + img.amps[r * cols + c1] * fr;
+    }
+    v.imgPos = pos / cols;
+    return this.imgCol;
+  }
+
   updateAmps(v, p, f0, K, s, dtStep){
     var fc = effectiveCutoff(p, f0, v.fenv);
-    voiceAmps(this.timbres, p, f0, K, fc, s, v.t, this.lfo, v.target, v.scratch);
+    var img = this.img && p.imgAmount > 0 ? this.imageColumn(v, p) : null;
+    voiceAmps(this.timbres, p, f0, K, fc, s, v.t, this.lfo, v.target, v.scratch, img);
     var keep = p.blurTime > 0 ? Math.exp(-dtStep / (p.blurTime / 1000)) : 0;
     for (var k = 1; k <= MAX_PARTIALS; k++) v.amps[k] = v.target[k] + (v.amps[k] - v.target[k]) * keep;
     v.f0 = f0; v.cutoff = fc; v.count = K; v.stretch = s;
@@ -939,7 +1010,7 @@ class ElfCharmorProcessor extends AudioWorkletProcessor {
       if (newest) {
         var amps = new Float32Array(newest.count + 1);
         for (var k = 1; k <= newest.count; k++) amps[k] = newest.amps[k] * newest.level;
-        this.port.postMessage({ type: 'spectrum', f0: newest.f0, cutoff: newest.cutoff, stretch: newest.stretch, lfo: this.lfo,
+        this.port.postMessage({ type: 'spectrum', f0: newest.f0, cutoff: newest.cutoff, stretch: newest.stretch, lfo: this.lfo, imgPos: newest.imgPos,
                                 amps: amps, voices: active, note: newest.note }, [amps.buffer]);
       } else {
         this.port.postMessage({ type: 'spectrum', amps: null, voices: 0 });
@@ -975,6 +1046,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     fxDly:false, dlyTime:350, dlyFb:35, dlyMix:25,
     fxRev:true, revSize:2.4, reverb:20,
     fxComp:false, compThresh:-18, compRatio:4, compGain:0,
+    imgData:'', imgCols:0, imgName:'', imgAmount:100, imgSpeed:4, imgLoop:true,
     volume:70,
     // Wheels: what the mod wheel does, and how far the pitch wheel bends (semitones).
     modMode:'vib', bendRange:2
@@ -1039,7 +1111,9 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     revSize:  { label:'Size',     min:0.3,  max:8,     unit:'s', log:true },
     compThresh:{ label:'Thresh',  min:-60,  max:0,     unit:'dB' },
     compRatio:{ label:'Ratio',    min:1,    max:20,    unit:':1', log:true },
-    compGain: { label:'Gain',     min:0,    max:24,    unit:'dB' }
+    compGain: { label:'Gain',     min:0,    max:24,    unit:'dB' },
+    imgAmount:{ label:'Amount',   min:0,    max:100,   unit:'%' },
+    imgSpeed: { label:'Time',     min:0.1,  max:30,    unit:'s', log:true }
   };
   for (var mi = 0; mi < MOD_SLOTS; mi++) KNOBS['modAmt' + mi] = { label:'Amount', min:-100, max:100, unit:'±' };
   var LAYOUT = {
@@ -1051,6 +1125,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     'dly-knobs':    ['dlyTime', 'dlyFb', 'dlyMix'],
     'rev-knobs':    ['revSize', 'reverb'],
     'comp-knobs':   ['compThresh', 'compRatio', 'compGain'],
+    'img-knobs':    ['imgAmount', 'imgSpeed'],
     'fenv-knobs':   ['fA', 'fD', 'fS', 'fR'],
     'aenv-knobs':   ['aA', 'aD', 'aS', 'aR'],
     'uni-knobs':    ['uniVoices', 'uniDetune', 'uniSpread'],
@@ -1065,6 +1140,13 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   };
 
   function preset(name, over){ var p = Object.assign({}, DEFAULTS, over); return { name: name, params: p }; }
+  // A staircase of single harmonics, one per column: the overtone series as an arpeggio.
+  function stairImage(){
+    var steps = [1, 2, 3, 4, 5, 6, 8, 10, 12, 10, 8, 6, 5, 4, 3, 2], cols = steps.length, b = new Uint8Array(cols * MAX_PARTIALS), s = '';
+    steps.forEach(function(h, c){ b[(h - 1) * cols + c] = 255; b[c] = Math.max(b[c], 150); });
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return { imgData: btoa(s), imgCols: cols, imgName: 'Overtone stairs' };
+  }
   var FACTORY = [
     preset('Init Saw', {}),
     preset('Glass Pad',       { waveA:'sin', waveB:'organ', morph:45, cutoff:2600, res:30, envAmt:20, fA:800, fD:2000, fS:60,
@@ -1095,6 +1177,8 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     preset('Morph Pad',       { waveA:'sin', waveB:'saw', e3A:2500, e3D:3000, e3S:100, e3R:2000, modSrc0:'env3', modDst0:'morph', modAmt0:100,
                                 l2Shape:'tri', l2Rate:0.2, l2Retrig:false, modSrc1:'lfo2', modDst1:'prism', modAmt1:12,
                                 cutoff:6000, uniVoices:4, uniDetune:12, uniSpread:80, aA:800, aR:2000, reverb:50 }),
+    preset('Spectral Arp',    Object.assign(stairImage(), { imgAmount:100, imgSpeed:2, imgLoop:true, cutoff:12000, res:0, envAmt:0,
+                                aA:5, aD:600, aS:100, aR:600, reverb:30, fxDly:true, dlyTime:250, dlyFb:40, dlyMix:25 })),
     preset('Blur Swell',      { waveA:'saw', waveB:'sqr', morph:50, blurTime:1500, blurHarm:40, cutoff:5000, envAmt:25, fA:600, fD:2000, fS:50,
                                 aA:50, aS:90, aR:1500, reverb:50 })
   ];
@@ -1120,7 +1204,11 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   var ctx = null, node = null, masterGain = null, engineReady = false;
   var pendingMessages = [];
   function send(msg){ if (node) node.port.postMessage(msg); else pendingMessages.push(msg); }
-  function sendParams(){ send({ type:'params', p: params }); }
+  function sendParams(){
+    var p = Object.assign({}, params);
+    delete p.imgData;   // the picture travels on its own, only when it changes
+    send({ type:'params', p: p });
+  }
 
   function initAudio(){
     if (ctx) return;
@@ -1137,7 +1225,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
       node.connect(fx.dist.input);
       node.port.onmessage = function(e){ onEngineMessage(e.data); };
       engineReady = true;
-      sendParams();
+      sendParams(); sendImage();
       pendingMessages.forEach(function(m){ node.port.postMessage(m); });
       pendingMessages = [];
     }, function(){ document.getElementById('no-worklet').hidden = false; });
@@ -1350,7 +1438,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   buildChoices('l2-shapes', 'l2Shape', LFO_SHAPES, ['SIN', 'TRI', 'SAW', 'SQR', 'RND']);
 
   // RETRIG switches
-  var toggles = { l1Retrig: document.getElementById('l1-retrig'), l2Retrig: document.getElementById('l2-retrig') };
+  var toggles = { l1Retrig: document.getElementById('l1-retrig'), l2Retrig: document.getElementById('l2-retrig'), imgLoop: document.getElementById('img-loop') };
   // Effect on/off slide switches
   var fxSwitches = {};
   document.querySelectorAll('.fx-unit').forEach(function(u){
@@ -1453,6 +1541,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     var src = key.indexOf('f:') === 0 ? FACTORY.filter(function(p){ return p.name === name; })[0].params : userPresets[name];
     if (!src) return;
     params = Object.assign({}, DEFAULTS, src); presetName = name;
+    loadImageFromParams(); sendImage();
     renderAll(); renderPresetSelect(); sendParams(); applyOutput(); saveNow(); drawPreview(); setStatus('');
   }
   presetSelect.addEventListener('change', function(){ if (presetSelect.value !== 'x:') loadPreset(presetSelect.value); });
@@ -1534,7 +1623,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     var f0 = 261.63, fc = effectiveCutoff(params, f0, params.fS / 100), s = prismStretch(params, params.fS / 100);
     var K = 1;
     while (K < MAX_PARTIALS && f0 * partialRatio(K + 1, s) < 20000) K++;
-    voiceAmps(timbres, params, f0, K, fc, s, 0, 0, previewAmps, previewScratch);
+    voiceAmps(timbres, params, f0, K, fc, s, 0, 0, previewAmps, previewScratch, imageColumnZero());
     drawScreen(f0, fc, previewAmps.subarray(0, K + 1), 'PREVIEW · C4', s, 0);
   }
   function onEngineMessage(m){
@@ -1543,6 +1632,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     if (m.amps) {
       liveUntil = performance.now() + 400;
       lastFrame = m;
+      if (imgBytes && m.imgPos !== undefined) drawImageBay(m.imgPos);
       drawScreen(m.f0, m.cutoff, m.amps, 'LIVE · ' + noteName(m.note) + ' · ' + (m.amps.length - 1) + (m.stretch ? ' PARTIALS' : ' HARMONICS'), m.stretch, m.lfo);
     } else if (performance.now() >= liveUntil - 300) {
       liveUntil = 0; drawPreview();
@@ -1615,6 +1705,182 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     delete heldLetters[e.code];
   });
   window.addEventListener('blur', function(){ heldLetters = {}; allNotesOff(); setSustainSource('key', false); });
+
+  // ---------- IMAGE: pictures and analysed sounds ----------
+  var imgBytes = null, imgCols = 0, imgCanvas = document.getElementById('img-canvas'), imgG = imgCanvas.getContext('2d');
+  var imgOffscreen = document.createElement('canvas'), imgZero = new Float64Array(MAX_PARTIALS + 1), imgTop = IMAGE_ROWS;
+  function bytesToB64(b){ var s = ''; for (var i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192)); return btoa(s); }
+  function b64ToBytes(s){ var bin = atob(s), b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }
+  function setImgStatus(text){ document.getElementById('img-status').textContent = text; }
+
+  function loadImageFromParams(){
+    try { imgBytes = params.imgData ? b64ToBytes(params.imgData) : null; } catch (err) { imgBytes = null; }
+    imgCols = imgBytes ? params.imgCols : 0;
+    if (imgBytes && imgBytes.length !== imgCols * IMAGE_ROWS) { imgBytes = null; imgCols = 0; }
+    renderImage();
+  }
+  function sendImage(){ send({ type:'image', bytes: imgBytes ? imgBytes.slice() : null, cols: imgCols }); }
+  function setImage(bytes, cols, name){
+    imgBytes = bytes; imgCols = cols;
+    params.imgData = bytes ? bytesToB64(bytes) : ''; params.imgCols = bytes ? cols : 0; params.imgName = bytes ? name : '';
+    sendImage(); renderImage(); renderAll(); changed('imgData');
+  }
+  function imageColumnZero(){
+    if (!imgBytes) return null;
+    for (var k = 1; k <= MAX_PARTIALS; k++) imgZero[k] = imageByteToAmp(imgBytes[(k - 1) * imgCols]);
+    return imgZero;
+  }
+  // The picture in amber on the dark screen, low harmonics at the bottom.
+  function renderImage(){
+    document.getElementById('img-drop').hidden = !!imgBytes;
+    if (!imgBytes) {
+      imgG.clearRect(0, 0, imgCanvas.width, imgCanvas.height);
+      setImgStatus('No image yet.');
+      return;
+    }
+    imgOffscreen.width = imgCols; imgOffscreen.height = IMAGE_ROWS;
+    var og = imgOffscreen.getContext('2d'), data = og.createImageData(imgCols, IMAGE_ROWS);
+    for (var r = 0; r < IMAGE_ROWS; r++) for (var c = 0; c < imgCols; c++) {
+      var b = imgBytes[r * imgCols + c] / 255, i = ((IMAGE_ROWS - 1 - r) * imgCols + c) * 4;
+      data.data[i] = 240 * b; data.data[i + 1] = 168 * b; data.data[i + 2] = 48 * b; data.data[i + 3] = 255;
+    }
+    og.putImageData(data, 0, 0);
+    // Show the rows up to the highest harmonic in use (at least 16), so a sound's
+    // few dozen harmonics fill the screen instead of a strip at the bottom.
+    imgTop = 16;
+    for (r = IMAGE_ROWS - 1; r >= 16; r--) {
+      var lit = false;
+      for (c = 0; c < imgCols && !lit; c++) lit = imgBytes[r * imgCols + c] > 0;
+      if (lit) { imgTop = Math.min(IMAGE_ROWS, r + 2); break; }
+    }
+    drawImageBay(null);
+    setImgStatus(params.imgName + ' \u00b7 ' + imgCols + ' columns \u00b7 harmonics 1\u2013' + imgTop);
+  }
+  function drawImageBay(pos){
+    imgG.imageSmoothingEnabled = false;
+    imgG.drawImage(imgOffscreen, 0, IMAGE_ROWS - imgTop, imgCols, imgTop, 0, 0, imgCanvas.width, imgCanvas.height);
+    if (pos !== null && pos !== undefined) {
+      var x = Math.round(pos * imgCanvas.width) + 0.5;
+      imgG.strokeStyle = 'rgba(126,196,190,.95)'; imgG.lineWidth = 2;
+      imgG.beginPath(); imgG.moveTo(x, 0); imgG.lineTo(x, imgCanvas.height); imgG.stroke();
+    }
+  }
+
+  function loadImageFile(file){
+    var url = URL.createObjectURL(file), pic = new Image();
+    pic.onload = function(){
+      var cols = Math.max(2, Math.min(256, pic.naturalWidth)), c = document.createElement('canvas');
+      c.width = cols; c.height = IMAGE_ROWS;
+      var g2 = c.getContext('2d'); g2.drawImage(pic, 0, 0, cols, IMAGE_ROWS);
+      var px = g2.getImageData(0, 0, cols, IMAGE_ROWS).data, bytes = new Uint8Array(cols * IMAGE_ROWS);
+      for (var y = 0; y < IMAGE_ROWS; y++) for (var x = 0; x < cols; x++) {
+        var i = (y * cols + x) * 4;
+        bytes[(IMAGE_ROWS - 1 - y) * cols + x] = Math.round((0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) * px[i + 3] / 255);
+      }
+      URL.revokeObjectURL(url);
+      setImage(bytes, cols, file.name);
+    };
+    pic.onerror = function(){ URL.revokeObjectURL(url); setImgStatus('Couldn\u2019t read that picture.'); };
+    pic.src = url;
+  }
+
+  // In-place radix-2 FFT (forward), for the sound analysis.
+  function fft(re, im){
+    var n = re.length;
+    for (var i = 1, j = 0; i < n; i++) {
+      var bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { var t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (var len = 2; len <= n; len <<= 1) {
+      var ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (i = 0; i < n; i += len) {
+        var cr = 1, ci = 0;
+        for (var k = 0; k < len / 2; k++) {
+          var a = i + k, b = a + len / 2;
+          var tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+          var nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+        }
+      }
+    }
+  }
+  // The sound's pitch: normalised autocorrelation over its loudest stretch, 50-1000 Hz.
+  function detectPitch(x, sr){
+    var N = 4096, best = 0, bestAt = 0;
+    for (var s = 0; s + N < x.length; s += 1024) {
+      var e = 0;
+      for (var i = s; i < s + N; i += 4) e += x[i] * x[i];
+      if (e > best) { best = e; bestAt = s; }
+    }
+    var w = x.subarray(bestAt, bestAt + N), lo = Math.floor(sr / 1000), hi = Math.min(N / 2, Math.ceil(sr / 50));
+    var corr = new Float64Array(hi + 2), peak = 0, lag = 0;
+    for (var l = lo; l <= hi + 1; l++) {
+      var sum = 0, n1 = 0, n2 = 0;
+      for (i = 0; i + l < N; i++) { sum += w[i] * w[i + l]; n1 += w[i] * w[i]; n2 += w[i + l] * w[i + l]; }
+      corr[l] = sum / (Math.sqrt(n1 * n2) || 1);
+    }
+    for (l = lo + 1; l <= hi; l++) {                   // the first strong peak, not just the biggest (octave errors)
+      if (corr[l] > corr[l - 1] && corr[l] >= corr[l + 1] && corr[l] > 0.8 * Math.max.apply(null, Array.prototype.slice.call(corr, lo, hi + 1))) { lag = l; break; }
+    }
+    if (!lag) return 0;
+    var d = (corr[lag - 1] - corr[lag + 1]) / (2 * (corr[lag - 1] - 2 * corr[lag] + corr[lag + 1]));   // parabolic refinement
+    return sr / (lag + (isFinite(d) ? d : 0));
+  }
+  function loadSoundFile(file){
+    setImgStatus('Analysing ' + file.name + '\u2026');
+    var decoder = new OfflineAudioContext(1, 1, 44100);
+    file.arrayBuffer().then(function(buf){ return decoder.decodeAudioData(buf); }).then(function(audio){
+      var sr = audio.sampleRate, len = Math.min(audio.length, Math.floor(sr * 30)), x = new Float32Array(len);
+      for (var ch = 0; ch < audio.numberOfChannels; ch++) {
+        var d = audio.getChannelData(ch);
+        for (var i = 0; i < len; i++) x[i] += d[i] / audio.numberOfChannels;
+      }
+      var f0 = detectPitch(x, sr);
+      if (!f0) { setImgStatus('Couldn\u2019t find a pitch in ' + file.name + '.'); return; }
+      var dur = len / sr, cols = Math.max(8, Math.min(256, Math.round(dur * 40)));
+      var N = f0 < 100 ? 8192 : 4096, re = new Float64Array(N), im = new Float64Array(N), binHz = sr / N;
+      var K = Math.min(MAX_PARTIALS, Math.floor(sr / 2 * 0.95 / f0)), mags = new Float64Array(cols * IMAGE_ROWS), max = 0;
+      for (var c = 0; c < cols; c++) {
+        var centre = Math.floor((c + 0.5) / cols * len);
+        for (i = 0; i < N; i++) {
+          var at = centre - N / 2 + i;
+          re[i] = at >= 0 && at < len ? x[at] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1))) : 0; im[i] = 0;
+        }
+        fft(re, im);
+        for (var k = 1; k <= K; k++) {
+          var bin = Math.round(k * f0 / binHz), m = 0;
+          for (var b = bin - 1; b <= bin + 1; b++) if (b > 0 && b < N / 2) m = Math.max(m, Math.hypot(re[b], im[b]));
+          mags[(k - 1) * cols + c] = m; max = Math.max(max, m);
+        }
+      }
+      var bytes = new Uint8Array(cols * IMAGE_ROWS);
+      for (i = 0; i < bytes.length; i++) {
+        var a = max > 0 ? mags[i] / max : 0;
+        bytes[i] = a <= 1e-3 ? 0 : Math.max(0, Math.min(255, Math.round(255 * (1 + 20 * Math.log10(a) / 60))));
+      }
+      params.imgSpeed = Math.max(0.1, Math.min(30, dur)); params.imgLoop = false;
+      setImage(bytes, cols, file.name + ' \u00b7 ' + noteName(Math.round(69 + 12 * Math.log2(f0 / 440))) + ' (' + Math.round(f0) + ' Hz)');
+    }).catch(function(){ setImgStatus('Couldn\u2019t read that sound.'); });
+  }
+
+  var imgFile = document.getElementById('img-file'), sndFile = document.getElementById('snd-file');
+  document.getElementById('img-load').addEventListener('click', function(){ imgFile.click(); });
+  document.getElementById('snd-load').addEventListener('click', function(){ sndFile.click(); });
+  imgFile.addEventListener('change', function(){ if (imgFile.files[0]) loadImageFile(imgFile.files[0]); imgFile.value = ''; });
+  sndFile.addEventListener('change', function(){ if (sndFile.files[0]) loadSoundFile(sndFile.files[0]); sndFile.value = ''; });
+  document.getElementById('img-clear').addEventListener('click', function(){ setImage(null, 0, ''); });
+  var bay = document.getElementById('img-bay');
+  bay.addEventListener('dragover', function(e){ e.preventDefault(); bay.classList.add('is-over'); });
+  bay.addEventListener('dragleave', function(){ bay.classList.remove('is-over'); });
+  bay.addEventListener('drop', function(e){
+    e.preventDefault(); bay.classList.remove('is-over');
+    var file = e.dataTransfer.files[0];
+    if (!file) return;
+    if (/^audio\//.test(file.type)) loadSoundFile(file); else loadImageFile(file);
+  });
+  loadImageFromParams(); drawPreview();
 
   // ---------- pitch and mod wheels (as on Loam Eight Sub) ----------
   var pitchWheelEl = document.getElementById('pitch-wheel'), modWheelEl = document.getElementById('mod-wheel');

@@ -47,6 +47,12 @@ the filter curve shaping them; with nothing playing, it previews C4.
   (±1 to ±12, shown on the wheel); the button over the mod wheel steps
   **VIB** (vibrato), **FILT** (opens the filter up to 4 octaves) and **MTRX**
   (only through the matrix). Presets keep their wheel setup
+- **Image** page — load a picture, or drop one on the screen: left to right
+  is time (**TIME** seconds for the whole picture, **LOOP** or hold the last
+  column), each row from the bottom is a harmonic (1 to 256), brighter is
+  louder over 60 dB. Or load a **sound**: it is analysed into the harmonics
+  of its pitch, frame by frame, and plays back at any note. **AMOUNT** mixes
+  the image with the timbre. Pictures are kept with presets
 - **FX** page — **DIST** (drive, tone, mix), **CHORUS** (rate, depth, mix),
   **DELAY** (time, feedback, mix), **REVERB** (size, mix) and **COMP**
   (threshold, ratio, gain), in that order, each with its own switch
