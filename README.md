@@ -39,6 +39,14 @@ the filter curve shaping them; with nothing playing, it previews C4.
   (±12 semitones), at **LEVEL**: fifths, octaves, chords from one key
 - **Blur** — **TIME** smears the harmonics in time (notes swell in, timbre
   changes melt), **HARM** smears them into their neighbours
+- **Mod** page — **LFO 1** and **LFO 2** (SIN, TRI, SAW, SQR, RND; rate, fade-in,
+  RETRIG per note), **ENV 2** and **ENV 3**, and a six-slot **mod matrix**:
+  any of them, velocity or the mod wheel onto pitch, cutoff, resonance, morph,
+  odd/even, prism, phaser offset, blur, pluck, detune, volume or pan
+- **Wheels** — as on Loam Eight Sub: the pitch wheel's range is set with + / −
+  (±1 to ±12, shown on the wheel); the button over the mod wheel steps
+  **VIB** (vibrato), **FILT** (opens the filter up to 4 octaves) and **MTRX**
+  (only through the matrix). Presets keep their wheel setup
 - **Output** — volume and reverb
 - **Presets** — factory sounds, and your own (kept in this browser)
 
@@ -48,7 +56,8 @@ Flip the power switch, then play two octaves from your computer keyboard,
 tracker-style: `Z`–`M` is the lower octave (sharps on `S D G H J`), `Q`–`P`
 the upper one (sharps on `2 3 5 6 7 9 0`), matched by position so any
 keyboard layout works. Hold `Space` as a sustain pedal. A MIDI keyboard works
-too in Chrome and Edge: notes, the sustain pedal and the pitch wheel (±2).
+too in Chrome and Edge: notes, the sustain pedal, and the pitch and mod wheels,
+which move the on-screen ones.
 
 And the little egret next to the name has something to say.
 

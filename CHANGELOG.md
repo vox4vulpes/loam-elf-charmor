@@ -15,9 +15,14 @@ release workflow refuses to publish a version that has no section here.
   harmonic series, also by the filter envelope), **Phaser** (moving notches
   across the spectrum), **Harmonizer** (up to two extra copies of each note an
   interval apart) and **Blur** (harmonics smeared in time and into each other).
+- **Mod page**: two LFOs, two more envelopes and a six-slot mod matrix
+  (envelopes, LFOs, velocity, mod wheel → pitch, cutoff, resonance, morph,
+  odd/even, prism, phaser offset, blur, pluck, detune, volume, pan).
+- **Pitch and mod wheels** as on Loam Eight Sub: bend range ± on the pitch
+  wheel, VIB / FILT / MTRX on the mod wheel, kept with presets.
 - A spectrum screen showing the harmonics of the newest note and the filter
   curve, or a preview of C4 while nothing plays.
-- Fourteen factory presets and your own, saved in the browser.
+- Seventeen factory presets and your own, saved in the browser.
 - Computer-keyboard and MIDI play (notes, sustain pedal, pitch wheel).
 - A pixel-art elf girl as the browser-tab and app icon, and the little egret
   beside the name.
