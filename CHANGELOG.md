@@ -25,10 +25,12 @@ release workflow refuses to publish a version that has no section here.
 - **FX page**: distortion, chorus, delay, reverb and compressor in a chain,
   each with its own on/off switch; the reverb moved here from Output.
 - **Pitch and mod wheels** as on Loam Eight Sub: bend range ± on the pitch
-  wheel, VIB / FILT / MTRX on the mod wheel, kept with presets.
+  wheel, VIB / FILT / CUST / MTRX on the mod wheel, kept with presets. In
+  CUST every knob gets a button to put it on the wheel, and red and green dots
+  on its ring for where the wheel takes it.
 - A spectrum screen showing the harmonics of the newest note and the filter
   curve, or a preview of C4 while nothing plays.
-- Eighteen factory presets and your own, saved in the browser.
+- Nineteen factory presets and your own, saved in the browser.
 - Computer-keyboard and MIDI play (notes, sustain pedal, pitch wheel).
 - A pixel-art elf girl as the browser-tab and app icon, and the little egret
   beside the name.

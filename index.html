@@ -25,6 +25,8 @@
     --readout-bg:#171308;
     --readout-ink:#f0a830;
     --focus:#2a7f90;
+    --mod-red:#d33b2c;
+    --mod-green:#3a9a4a;
     --shadow:rgba(30,25,15,.35);
   }
   @media (prefers-color-scheme: dark){
@@ -227,6 +229,27 @@
     background:var(--accent); transform-origin:50% 100%;
     transform:translateX(-50%) rotate(var(--angle,-135deg)); box-shadow:0 0 4px var(--accent);
   }
+  /* CUST mod wheel, as on Loam Eight Sub: a button per knob assigns it; red and
+     green dots on the ring set where the wheel takes it, red at the bottom. */
+  .knob{position:relative;}
+  .knob-dial{position:relative;}
+  .mod-btn{
+    display:none; position:absolute; top:-3px; right:-5px; z-index:3;
+    width:13px; height:13px; padding:0; border-radius:50%;
+    border:1.5px solid var(--groove-dark); background:var(--panel); cursor:pointer;
+  }
+  .mod-btn[data-state="fwd"]{background:var(--mod-green); border-color:var(--mod-green);}
+  .mod-btn[data-state="rev"]{background:var(--mod-red); border-color:var(--mod-red);}
+  body.mod-custom .mod-btn{display:block;}
+  .mod-dot{
+    display:none; position:absolute; z-index:2; width:10px; height:10px; margin:-5px 0 0 -5px;
+    border-radius:50%; border:1.5px solid var(--panel-raised); box-shadow:0 1px 2px var(--shadow);
+    cursor:grab; touch-action:none;
+  }
+  .mod-dot--red{background:var(--mod-red);}
+  .mod-dot--green{background:var(--mod-green);}
+  body.mod-custom .knob.is-bound .mod-dot{display:block;}
+  .knob.is-modded .knob-cap{cursor:default;}
   .knob-label{font-size:9px; font-weight:600; letter-spacing:.05em; color:var(--ink-soft); text-transform:uppercase; white-space:nowrap;}
   .knob-readout{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap;}
 
@@ -512,7 +535,7 @@
           <button class="chip-btn wheel-btn" type="button" id="bend-down" aria-label="Narrower pitch bend range">&minus;</button>
         </div>
         <div class="wheel-col">
-          <button class="chip-btn wheel-btn is-active" type="button" id="mod-mode" title="Mod wheel: vibrato, filter, or only through the mod matrix"></button>
+          <button class="chip-btn wheel-btn is-active" type="button" id="mod-mode" title="Mod wheel: vibrato, filter, custom (knobs you put on it), or only through the mod matrix"></button>
           <div class="wheel wheel--mod" id="mod-wheel" role="slider" aria-label="Mod wheel" aria-valuemin="0" aria-valuemax="1" tabindex="0">
             <div class="wheel-slot"><div class="wheel-face"><div class="wheel-thumb"></div></div></div>
           </div>
@@ -1049,8 +1072,11 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     imgData:'', imgCols:0, imgName:'', imgAmount:100, imgSpeed:4, imgLoop:true,
     volume:70,
     // Wheels: what the mod wheel does, and how far the pitch wheel bends (semitones).
-    modMode:'vib', bendRange:2
+    modMode:'vib', bendRange:2,
+    // CUST: knobs on the mod wheel, { id: { red, green, reversed } } as knob positions 0..1
+    custMap:{}
   };
+  function cloneParams(p){ return JSON.parse(JSON.stringify(p)); }
   // Mod matrix: six slots, source -> target x amount; empty to start.
   ['cutoff', 'pitch', 'morph', 'prism', 'volume', 'pan'].forEach(function(dst, i){
     DEFAULTS['modSrc' + i] = 'none'; DEFAULTS['modDst' + i] = dst; DEFAULTS['modAmt' + i] = 0;
@@ -1139,7 +1165,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     'e3-knobs':     ['e3A', 'e3D', 'e3S', 'e3R']
   };
 
-  function preset(name, over){ var p = Object.assign({}, DEFAULTS, over); return { name: name, params: p }; }
+  function preset(name, over){ var p = cloneParams(Object.assign({}, DEFAULTS, over)); return { name: name, params: p }; }
   // A staircase of single harmonics, one per column: the overtone series as an arpeggio.
   function stairImage(){
     var steps = [1, 2, 3, 4, 5, 6, 8, 10, 12, 10, 8, 6, 5, 4, 3, 2], cols = steps.length, b = new Uint8Array(cols * MAX_PARTIALS), s = '';
@@ -1179,17 +1205,22 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
                                 cutoff:6000, uniVoices:4, uniDetune:12, uniSpread:80, aA:800, aR:2000, reverb:50 }),
     preset('Spectral Arp',    Object.assign(stairImage(), { imgAmount:100, imgSpeed:2, imgLoop:true, cutoff:12000, res:0, envAmt:0,
                                 aA:5, aD:600, aS:100, aR:600, reverb:30, fxDly:true, dlyTime:250, dlyFb:40, dlyMix:25 })),
+    // CUST: the mod wheel opens the filter, morphs saw into square and bends the series.
+    preset('Wheel Morph',     { waveA:'saw', waveB:'sqr', cutoff:1500, res:30, envAmt:0, aA:20, aS:90, aR:600, uniVoices:2, uniDetune:8, reverb:30,
+                                modMode:'custom', custMap:{ morph:{ red:0, green:1, reversed:false },
+                                                           cutoff:{ red:toT(KNOBS.cutoff, 1500), green:toT(KNOBS.cutoff, 9000), reversed:false },
+                                                           prism:{ red:0.5, green:0.7, reversed:false } } }),
     preset('Blur Swell',      { waveA:'saw', waveB:'sqr', morph:50, blurTime:1500, blurHarm:40, cutoff:5000, envAmt:25, fA:600, fD:2000, fS:50,
                                 aA:50, aS:90, aR:1500, reverb:50 })
   ];
 
   var STATE_KEY = 'loam-elf-charmor/state/v1', USER_KEY = 'loam-elf-charmor/presets/v1';
-  var params = Object.assign({}, DEFAULTS), presetName = 'Init Saw';
+  var params = cloneParams(DEFAULTS), presetName = 'Init Saw';
   var userPresets = {};
   try { userPresets = JSON.parse(localStorage.getItem(USER_KEY) || '{}') || {}; } catch (err) { userPresets = {}; }
   try {
     var saved = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
-    if (saved && saved.params) { params = Object.assign({}, DEFAULTS, saved.params); presetName = saved.preset || ''; }
+    if (saved && saved.params) { params = cloneParams(Object.assign({}, DEFAULTS, saved.params)); presetName = saved.preset || ''; }
   } catch (err) { /* storage unavailable: start fresh */ }
 
   var saveTimer = null;
@@ -1204,9 +1235,20 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   var ctx = null, node = null, masterGain = null, engineReady = false;
   var pendingMessages = [];
   function send(msg){ if (node) node.port.postMessage(msg); else pendingMessages.push(msg); }
+  // What's heard: the knobs, with CUST moving the ones on the mod wheel.
+  var modWheelValue = 0;
+  function effectiveParams(){
+    if (params.modMode !== 'custom') return params;
+    var e = Object.assign({}, params);
+    Object.keys(params.custMap).forEach(function(id){
+      var b = params.custMap[id];
+      if (KNOBS[id]) e[id] = fromT(KNOBS[id], b.red + (b.green - b.red) * modWheelValue);
+    });
+    return e;
+  }
   function sendParams(){
-    var p = Object.assign({}, params);
-    delete p.imgData;   // the picture travels on its own, only when it changes
+    var p = Object.assign({}, effectiveParams());
+    delete p.imgData; delete p.custMap;   // the picture travels on its own, only when it changes
     send({ type:'params', p: p });
   }
 
@@ -1290,7 +1332,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   }
   function applyOutput(){
     if (!ctx) return;
-    var t = ctx.currentTime, p = params;
+    var t = ctx.currentTime, p = effectiveParams();
     function mix(u, on, dry, wet){ u.dry.gain.setTargetAtTime(on ? dry : 1, t, 0.01); u.wet.gain.setTargetAtTime(on ? wet : 0, t, 0.01); }
     if (shownDrive !== p.distDrive) {   // the drive curve: tanh(g x) / tanh(g), g from 1 to 20,
       // scaled by 1/sqrt(g) so more drive means more grit rather than just more level
@@ -1389,18 +1431,60 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     var el = document.createElement('div');
     el.className = 'knob'; el.tabIndex = 0; el.setAttribute('role', 'slider'); el.setAttribute('aria-label', def.label);
     if (accent) el.style.setProperty('--accent', accent);
-    el.innerHTML = '<div class="knob-dial"><div class="knob-cap"><div class="knob-pointer"></div></div></div>' +
+    el.innerHTML = '<div class="knob-dial"><div class="knob-cap"><div class="knob-pointer"></div></div>' +
+                   '<span class="mod-dot mod-dot--red"></span><span class="mod-dot mod-dot--green"></span></div>' +
+                   '<button type="button" class="mod-btn" data-state="off"></button>' +
                    '<div class="knob-label"></div><div class="knob-readout"></div>';
     el.querySelector('.knob-label').textContent = def.label;
-    var cap = el.querySelector('.knob-cap'), readout = el.querySelector('.knob-readout');
+    var cap = el.querySelector('.knob-cap'), readout = el.querySelector('.knob-readout'), dial = el.querySelector('.knob-dial');
+    var modBtn = el.querySelector('.mod-btn'), dots = { red: el.querySelector('.mod-dot--red'), green: el.querySelector('.mod-dot--green') };
+    function modded(){ return params.modMode === 'custom' && !!params.custMap[id]; }
+    function placeDot(dot, t){
+      var a = (-135 + t * 270) * Math.PI / 180, r = 23;
+      dot.style.left = (24 + r * Math.sin(a)) + 'px';
+      dot.style.top = (24 - r * Math.cos(a)) + 'px';
+    }
+    // While the wheel drives it, the knob shows (and says) where it's heard; its own value stays underneath.
     function render(){
-      var v = params[id];
+      var b = params.custMap[id], v = modded() ? fromT(def, b.red + (b.green - b.red) * modWheelValue) : params[id];
       el.style.setProperty('--angle', (-135 + toT(def, v) * 270) + 'deg');
       readout.textContent = fmt(def, v); el.setAttribute('aria-valuetext', fmt(def, v));
+      el.classList.toggle('is-bound', !!b);
+      el.classList.toggle('is-modded', modded());
+      modBtn.dataset.state = !b ? 'off' : (b.reversed ? 'rev' : 'fwd');
+      modBtn.setAttribute('aria-label', def.label + ' on the mod wheel: ' + (!b ? 'off' : b.reversed ? 'reversed' : 'on'));
+      if (b) { placeDot(dots.red, b.red); placeDot(dots.green, b.green); }
     }
+    // Off -> on (red where the knob is, green at the far end) -> reversed (dots swapped) -> off.
+    modBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var b = params.custMap[id];
+      if (!b) { var t0 = toT(def, params[id]); params.custMap[id] = { red: t0, green: t0 < 0.95 ? 1 : 0, reversed: false }; }
+      else if (!b.reversed) params.custMap[id] = { red: b.green, green: b.red, reversed: true };
+      else delete params.custMap[id];
+      render(); changed(id);
+    });
+    ['red', 'green'].forEach(function(which){
+      var dot = dots[which], draggingDot = false;
+      dot.addEventListener('pointerdown', function(e){ e.stopPropagation(); draggingDot = true; dot.setPointerCapture(e.pointerId); });
+      dot.addEventListener('pointermove', function(e){
+        var b = params.custMap[id];
+        if (!draggingDot || !b) return;
+        var r = dial.getBoundingClientRect();
+        var deg = Math.atan2(e.clientX - (r.left + r.width / 2), (r.top + r.height / 2) - e.clientY) * 180 / Math.PI;
+        if (deg > 135) deg = deg > 157.5 ? -135 : 135;            // the gap at the bottom: snap to the nearer end
+        else if (deg < -135) deg = deg < -157.5 ? 135 : -135;
+        b[which] = Math.max(0, Math.min(1, (deg + 135) / 270));
+        render(); changed(id);
+      });
+      ['pointerup', 'pointercancel'].forEach(function(type){ dot.addEventListener(type, function(){ draggingDot = false; }); });
+    });
     function set(v){ params[id] = v; render(); changed(id); }
     var drag = null;
-    cap.addEventListener('pointerdown', function(e){ drag = { y: e.clientY, t: toT(def, params[id]) }; cap.setPointerCapture(e.pointerId); });
+    cap.addEventListener('pointerdown', function(e){
+      if (modded()) return;   // the mod wheel is driving it
+      drag = { y: e.clientY, t: toT(def, params[id]) }; cap.setPointerCapture(e.pointerId);
+    });
     cap.addEventListener('pointermove', function(e){ if (drag) set(fromT(def, drag.t + (drag.y - e.clientY) / 150)); });
     cap.addEventListener('pointerup', function(){ drag = null; });
     cap.addEventListener('dblclick', function(){ set(DEFAULTS[id]); });
@@ -1540,7 +1624,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     var name = key.slice(2);
     var src = key.indexOf('f:') === 0 ? FACTORY.filter(function(p){ return p.name === name; })[0].params : userPresets[name];
     if (!src) return;
-    params = Object.assign({}, DEFAULTS, src); presetName = name;
+    params = cloneParams(Object.assign({}, DEFAULTS, src)); presetName = name;
     loadImageFromParams(); sendImage();
     renderAll(); renderPresetSelect(); sendParams(); applyOutput(); saveNow(); drawPreview(); setStatus('');
   }
@@ -1555,7 +1639,7 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
     var name = presetNameInput.value.trim() || (userPresets[presetName.replace(/ \(edited\)$/, '')] ? presetName.replace(/ \(edited\)$/, '') : 'My preset ' + (Object.keys(userPresets).length + 1));
     if (FACTORY.some(function(p){ return p.name === name; })) name += ' (mine)';
     var existed = !!userPresets[name];
-    userPresets[name] = Object.assign({}, params);
+    userPresets[name] = cloneParams(params);
     var stored = storeUser();
     presetName = name; presetNameInput.value = '';
     renderPresetSelect(); saveNow();
@@ -1896,9 +1980,16 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   }
   function setModWheel(v){
     v = Math.max(0, Math.min(1, v));
+    modWheelValue = v;
     renderWheel(modWheelEl, v);
     modWheelEl.setAttribute('aria-valuenow', v.toFixed(2));
     send({ type:'wheel', value: v });
+    if (params.modMode === 'custom') refreshCustom();
+  }
+  // CUST: the knobs on the wheel follow it, and the sound gets their new values.
+  function refreshCustom(){
+    Object.keys(params.custMap).forEach(function(id){ if (knobRenders[id]) knobRenders[id](); });
+    sendParams(); applyOutput();
   }
   function wheelDrag(el, set, bipolar){
     var dragging = false;
@@ -1922,16 +2013,18 @@ registerProcessor('elf-charmor', ElfCharmorProcessor);
   renderWheel(pitchWheelEl, 0.5); renderWheel(modWheelEl, 0);
 
   // The button over the mod wheel steps VIB -> FILT -> MTRX; + / - set the bend range.
-  var MOD_MODES = ['vib', 'filter', 'matrix'], MOD_MODE_NAMES = { vib:'VIB', filter:'FILT', matrix:'MTRX' };
+  var MOD_MODES = ['vib', 'filter', 'custom', 'matrix'], MOD_MODE_NAMES = { vib:'VIB', filter:'FILT', custom:'CUST', matrix:'MTRX' };
   var modModeButton = document.getElementById('mod-mode');
   function renderWheels(){
     modModeButton.textContent = MOD_MODE_NAMES[params.modMode] || 'VIB';
     modModeButton.setAttribute('aria-label', 'Mod wheel mode: ' + modModeButton.textContent + ' (click for next)');
     document.getElementById('bend-range').textContent = params.bendRange;
+    document.body.classList.toggle('mod-custom', params.modMode === 'custom');
   }
   modModeButton.addEventListener('click', function(){
     params.modMode = MOD_MODES[(MOD_MODES.indexOf(params.modMode) + 1) % MOD_MODES.length];
     renderWheels(); changed('modMode');
+    Object.keys(knobRenders).forEach(function(id){ knobRenders[id](); });   // CUST knobs show (or stop showing) the wheel
   });
   function stepBend(d){ params.bendRange = Math.max(1, Math.min(12, params.bendRange + d)); renderWheels(); changed('bendRange'); }
   document.getElementById('bend-up').addEventListener('click', function(){ stepBend(1); });

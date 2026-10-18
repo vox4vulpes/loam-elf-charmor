@@ -45,8 +45,11 @@ the filter curve shaping them; with nothing playing, it previews C4.
   odd/even, prism, phaser offset, blur, pluck, detune, volume or pan
 - **Wheels** — as on Loam Eight Sub: the pitch wheel's range is set with + / −
   (±1 to ±12, shown on the wheel); the button over the mod wheel steps
-  **VIB** (vibrato), **FILT** (opens the filter up to 4 octaves) and **MTRX**
-  (only through the matrix). Presets keep their wheel setup
+  **VIB** (vibrato), **FILT** (opens the filter up to 4 octaves), **CUST** and
+  **MTRX** (only through the matrix). In CUST every knob gets a small button:
+  click once to put it on the wheel (green), again to reverse it (red), a third
+  time to free it; drag the red and green dots on its ring to set where the
+  wheel takes it, from red (wheel down) to green (wheel up). Presets keep their wheel setup
 - **Image** page — load a picture, or drop one on the screen: left to right
   is time (**TIME** seconds for the whole picture, **LOOP** or hold the last
   column), each row from the bottom is a harmonic (1 to 256), brighter is
